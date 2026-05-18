@@ -652,9 +652,7 @@ async function setEditorField(page, label, value) {
 
 async function getNextPaginationNumber(page) {
   return page.evaluate(() => {
-    const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
-      .filter((element) => /\b\d+\b/.test(element.textContent || ''));
-    const scope = containers[0] || document;
+    const scope = findHomeworkPaginationScope();
     const numbers = Array.from(scope.querySelectorAll('a, button, li'))
       .map((element) => Number((element.textContent || '').trim()))
       .filter((number) => Number.isInteger(number) && number > 0);
@@ -670,14 +668,55 @@ async function getNextPaginationNumber(page) {
     const next = [...new Set(numbers)].sort((a, b) => a - b).find((number) => number > current);
 
     return next || null;
+
+    function findHomeworkPaginationScope() {
+      const table = findHomeworkTable();
+      const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
+        .filter((element) => /\b\d+\b/.test(element.textContent || '') && isVisible(element));
+
+      if (!table || containers.length === 0) {
+        return containers[0] || document;
+      }
+
+      const tableBox = table.getBoundingClientRect();
+      const afterTable = containers
+        .map((element) => ({
+          distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
+          element,
+          top: element.getBoundingClientRect().top,
+        }))
+        .filter((item) => item.top >= tableBox.top - 20)
+        .sort((a, b) => a.distance - b.distance);
+
+      return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
+    }
+
+    function findHomeworkTable() {
+      return Array.from(document.querySelectorAll('table')).find((candidate) => {
+        const text = normalize(candidate.textContent || '').toLowerCase();
+        return text.includes('тема уроку') && text.includes('домашнє завдання');
+      });
+    }
+
+    function isVisible(element) {
+      const style = window.getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+
+      return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        box.width > 0 &&
+        box.height > 0;
+    }
+
+    function normalize(value) {
+      return value.replace(/\s+/g, ' ').trim();
+    }
   });
 }
 
 async function clickPaginationNumber(page, pageNumber) {
   const clicked = await page.evaluate((targetNumber) => {
-    const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
-      .filter((candidate) => /\b\d+\b/.test(candidate.textContent || ''));
-    const scope = containers[0] || document;
+    const scope = findHomeworkPaginationScope();
     const element = Array.from(scope.querySelectorAll('a, button'))
       .find((candidate) => (candidate.textContent || '').trim() === String(targetNumber));
 
@@ -692,6 +731,49 @@ async function clickPaginationNumber(page, pageNumber) {
     }));
 
     return true;
+
+    function findHomeworkPaginationScope() {
+      const table = findHomeworkTable();
+      const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
+        .filter((elementCandidate) => /\b\d+\b/.test(elementCandidate.textContent || '') && isVisible(elementCandidate));
+
+      if (!table || containers.length === 0) {
+        return containers[0] || document;
+      }
+
+      const tableBox = table.getBoundingClientRect();
+      const afterTable = containers
+        .map((elementCandidate) => ({
+          distance: Math.abs(elementCandidate.getBoundingClientRect().top - tableBox.bottom),
+          element: elementCandidate,
+          top: elementCandidate.getBoundingClientRect().top,
+        }))
+        .filter((item) => item.top >= tableBox.top - 20)
+        .sort((a, b) => a.distance - b.distance);
+
+      return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
+    }
+
+    function findHomeworkTable() {
+      return Array.from(document.querySelectorAll('table')).find((candidate) => {
+        const text = normalize(candidate.textContent || '').toLowerCase();
+        return text.includes('тема уроку') && text.includes('домашнє завдання');
+      });
+    }
+
+    function isVisible(elementCandidate) {
+      const style = window.getComputedStyle(elementCandidate);
+      const box = elementCandidate.getBoundingClientRect();
+
+      return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        box.width > 0 &&
+        box.height > 0;
+    }
+
+    function normalize(value) {
+      return value.replace(/\s+/g, ' ').trim();
+    }
   }, pageNumber);
 
   if (!clicked) {
@@ -699,11 +781,37 @@ async function clickPaginationNumber(page, pageNumber) {
   }
 
   await page.waitForFunction((targetNumber) => {
-    const activeText = Array.from(document.querySelectorAll('.pagination .active, [aria-current="page"], .active'))
+    const scope = findHomeworkPaginationScope();
+    const activeText = Array.from(scope.querySelectorAll('.active, [aria-current="page"]'))
       .map((element) => (element.textContent || '').trim())
       .find((text) => text === String(targetNumber));
 
     return Boolean(activeText) || window.location.href.includes(`page=${targetNumber}`);
+
+    function findHomeworkPaginationScope() {
+      const table = Array.from(document.querySelectorAll('table')).find((candidate) => {
+        const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return text.includes('тема уроку') && text.includes('домашнє завдання');
+      });
+      const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
+        .filter((element) => /\b\d+\b/.test(element.textContent || ''));
+
+      if (!table || containers.length === 0) {
+        return containers[0] || document;
+      }
+
+      const tableBox = table.getBoundingClientRect();
+      const afterTable = containers
+        .map((element) => ({
+          distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
+          element,
+          top: element.getBoundingClientRect().top,
+        }))
+        .filter((item) => item.top >= tableBox.top - 20)
+        .sort((a, b) => a.distance - b.distance);
+
+      return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
+    }
   }, pageNumber, {
     timeout: 10000,
   }).catch(() => {});
