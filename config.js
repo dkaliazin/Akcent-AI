@@ -6,6 +6,17 @@ loadLocalEnv();
 
 const browserName = (process.env.BROWSER || '').trim().toLowerCase();
 const isChrome = browserName === 'chrome';
+const cdpEndpoint = process.env.CHROME_CDP_ENDPOINT || process.env.CDP_ENDPOINT;
+
+const booleanFromEnv = (name, fallback) => {
+  const rawValue = process.env[name];
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  return !['0', 'false', 'no', 'off'].includes(rawValue.trim().toLowerCase());
+};
 
 const numberFromEnv = (name, fallback) => {
   const rawValue = process.env[name];
@@ -83,8 +94,9 @@ const getUserDataDirSource = () => {
 
 module.exports = {
   baseUrl: 'https://nz.ua',
-  browserName,
-  browserChannel: isChrome && !process.env.BROWSER_EXECUTABLE_PATH ? 'chrome' : undefined,
+  browserName: cdpEndpoint ? 'chrome-cdp' : browserName,
+  browserChannel: !cdpEndpoint && isChrome && !process.env.BROWSER_EXECUTABLE_PATH ? 'chrome' : undefined,
+  cdpEndpoint,
   browserExecutablePath: process.env.BROWSER_EXECUTABLE_PATH ||
     (isChrome ? getDefaultChromeExecutablePath() : undefined),
   browserProfileDirectory: process.env.CHROME_PROFILE_DIRECTORY ||
@@ -100,6 +112,10 @@ module.exports = {
     )
   ),
   userDataDirSource: getUserDataDirSource(),
+  disableDevToolsDebuggingRestrictions: booleanFromEnv(
+    'CHROME_DISABLE_DEVTOOLS_RESTRICTIONS',
+    isChrome
+  ),
   headless: process.env.HEADLESS === 'true',
   slowMo: numberFromEnv('SLOW_MO_MS', 0),
   defaultTimeout: numberFromEnv('DEFAULT_TIMEOUT_MS', 15000),

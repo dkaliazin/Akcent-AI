@@ -145,6 +145,45 @@ CHROME_PROFILE_DIRECTORY=Profile 1
 
 Перед запуском закройте все обычные окна Google Chrome, если используете реальный профиль Chrome. Если Chrome не закрыт, Playwright может не получить доступ к профилю.
 
+Chrome 136+ может не давать Playwright нормально автоматизировать обычный основной профиль Chrome: окно открывается на `about:blank`, страницы не грузятся или профиль не подхватывается. Для Chrome-режима бот автоматически добавляет флаг:
+
+```text
+--disable-features=DevToolsDebuggingRestrictions
+```
+
+Если это не помогает, используйте CDP-режим ниже или отдельный automation-профиль.
+
+### CDP-режим: подключиться к уже запущенному Chrome
+
+Самый надежный обход для локального Chrome - запустить Chrome вручную с remote debugging и подключиться к нему.
+
+1. Полностью закройте Chrome.
+2. Запустите Chrome из PowerShell:
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\Google\Chrome\User Data" --profile-directory="Default"
+```
+
+Если Chrome установлен в другом месте, замените путь к `chrome.exe`.
+
+3. Проверьте, что debug-порт работает: откройте в Chrome:
+
+```text
+http://localhost:9222/json/version
+```
+
+Если видите JSON - все готово.
+
+4. В локальном `.env` для бота укажите:
+
+```dotenv
+CHROME_CDP_ENDPOINT=http://localhost:9222
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+В CDP-режиме бот подключается к уже открытому Chrome и использует его текущие cookies. При завершении скрипт не закрывает этот Chrome.
+
 Если видите ошибку `EEXIST: file already exists, mkdir '...\chrome.exe'`, значит в `.env` путь к `chrome.exe` указан как профиль. Исправьте `.env` так:
 
 ```dotenv
@@ -166,6 +205,8 @@ MANUAL_LOGIN_TIMEOUT_MS=600000
 ## Настройки через env
 
 - `BROWSER=chrome` - использовать системный Google Chrome.
+- `CHROME_CDP_ENDPOINT=http://localhost:9222` - подключиться к уже запущенному Chrome через CDP.
+- `CHROME_DISABLE_DEVTOOLS_RESTRICTIONS=false` - отключить автоматический флаг обхода Chrome DevTools restrictions.
 - `BROWSER_EXECUTABLE_PATH=/path/to/browser` - путь к установленному Chromium-based браузеру.
 - `BROWSER_PROFILE_DIRECTORY=Default` - имя профиля внутри `USER_DATA_DIR`.
 - `CHROME_USER_DATA_DIR=C:\Users\...\Google\Chrome\User Data` - папка профилей Google Chrome.

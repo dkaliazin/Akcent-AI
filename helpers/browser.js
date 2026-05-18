@@ -3,6 +3,10 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 async function launchPersistentBrowser(config) {
+  if (config.cdpEndpoint) {
+    return connectToExistingBrowser(config);
+  }
+
   console.log(`[1/7] Запускаю браузер с persistent profile: ${config.userDataDir}`);
   logBrowserConfig(config);
 
@@ -29,9 +33,20 @@ async function launchPersistentBrowser(config) {
     console.log('Использую Chromium из Playwright');
   }
 
+  const browserArgs = [];
+
   if (config.browserProfileDirectory) {
     console.log(`Использую профиль браузера: ${config.browserProfileDirectory}`);
-    launchOptions.args = [`--profile-directory=${config.browserProfileDirectory}`];
+    browserArgs.push(`--profile-directory=${config.browserProfileDirectory}`);
+  }
+
+  if (config.disableDevToolsDebuggingRestrictions) {
+    console.log('Отключаю Chrome DevTools debugging restrictions для persistent profile');
+    browserArgs.push('--disable-features=DevToolsDebuggingRestrictions');
+  }
+
+  if (browserArgs.length > 0) {
+    launchOptions.args = browserArgs;
   }
 
   const context = await chromium.launchPersistentContext(config.userDataDir, launchOptions);
@@ -45,8 +60,44 @@ async function launchPersistentBrowser(config) {
   return { context, page };
 }
 
+async function connectToExistingBrowser(config) {
+  console.log(`[1/7] Подключаюсь к уже запущенному Chrome: ${config.cdpEndpoint}`);
+  logBrowserConfig(config);
+
+  const browser = await chromium.connectOverCDP(config.cdpEndpoint, {
+    noDefaults: true,
+    slowMo: config.slowMo,
+    timeout: config.navigationTimeout,
+  });
+
+  const context = browser.contexts()[0];
+
+  if (!context) {
+    throw new Error('Не найден default context в Chrome CDP-сессии.');
+  }
+
+  context.setDefaultTimeout(config.defaultTimeout);
+  context.setDefaultNavigationTimeout(config.navigationTimeout);
+
+  const page = context.pages()[0] || await context.newPage();
+
+  return {
+    context,
+    page,
+    close: async () => {
+      console.log('CDP режим: оставляю уже запущенный Chrome открытым');
+    },
+  };
+}
+
 function logBrowserConfig(config) {
   console.log(`BROWSER: ${config.browserName || 'playwright-chromium'}`);
+  if (config.cdpEndpoint) {
+    console.log(`CDP endpoint: ${config.cdpEndpoint}`);
+    console.log('Профиль и cookies управляются уже запущенным Chrome');
+    return;
+  }
+
   console.log(`Путь к браузеру: ${config.browserExecutablePath || config.browserChannel || 'Playwright Chromium'}`);
   console.log(`Источник профиля: ${config.userDataDirSource || 'default'}`);
   console.log(`Папка профиля: ${config.userDataDir}`);
