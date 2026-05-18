@@ -24,6 +24,7 @@ const pathFromEnv = (name, fallback) => {
 module.exports = {
   baseUrl: 'https://nz.ua',
   browserExecutablePath: process.env.BROWSER_EXECUTABLE_PATH,
+  browserProfileDirectory: process.env.BROWSER_PROFILE_DIRECTORY,
   userDataDir: pathFromEnv(
     'USER_DATA_DIR',
     path.resolve(__dirname, '.browser-profile', 'chromium')
@@ -34,6 +35,7 @@ module.exports = {
   navigationTimeout: numberFromEnv('NAVIGATION_TIMEOUT_MS', 30000),
   optionalPopupTimeout: numberFromEnv('OPTIONAL_POPUP_TIMEOUT_MS', 5000),
   manualVerificationTimeout: numberFromEnv('MANUAL_VERIFICATION_TIMEOUT_MS', 120000),
+  manualLoginTimeout: numberFromEnv('MANUAL_LOGIN_TIMEOUT_MS', 600000),
   viewport: {
     width: 1366,
     height: 768,
@@ -56,6 +58,14 @@ module.exports = {
       'input[type="submit"][value*="Увійти"]',
       'button:has-text("Увійти")',
       'text=Увійти',
+    ],
+    loginPageMarker: [
+      'text=Вхід на сайт',
+      'text=Ім\'я користувача або e-mail',
+      'text=Пароль',
+      'input[name="login"]',
+      'input[name="email"]',
+      'input[type="password"]',
     ],
     okPopupButton: [
       'button:has-text("OK")',

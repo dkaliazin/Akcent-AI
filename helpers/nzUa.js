@@ -32,7 +32,7 @@ async function clickLoginButton(page, config) {
     });
     await waitForLoadToSettle(page);
   } catch (error) {
-    const journalsLinkVisible = await hasJournalsLink(page, config);
+    const journalsLinkVisible = await hasJournalsLink(page, config, 3000);
 
     if (!journalsLinkVisible) {
       throw error;
@@ -40,6 +40,8 @@ async function clickLoginButton(page, config) {
 
     console.log('Кнопка входа не найдена, потому что активная сессия уже открыта');
   }
+
+  await waitForCabinetAccess(page, config);
 }
 
 async function openTrainingJournals(page, config) {
@@ -57,10 +59,53 @@ async function openTrainingJournals(page, config) {
   });
 }
 
-async function hasJournalsLink(page, config) {
+async function hasJournalsLink(page, config, timeout = 3000) {
   try {
     await waitForAnySelector(page, config.selectors.journalsLink, {
-      timeout: 3000,
+      timeout,
+    });
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function waitForCabinetAccess(page, config) {
+  const journalsLinkVisible = await hasJournalsLink(page, config, 5000);
+
+  if (journalsLinkVisible) {
+    console.log('Вход выполнен, ссылка "Навчальні журнали" доступна');
+    return;
+  }
+
+  const loginFormVisible = await hasLoginPageMarker(page, config);
+
+  if (!loginFormVisible) {
+    console.log(
+      'Ссылка "Навчальні журнали" пока не найдена. Жду ручной вход перед продолжением.'
+    );
+  } else {
+    console.log(
+      'Автоматический вход не выполнен: открыта форма логина. Войдите вручную в открытом браузере.'
+    );
+  }
+
+  console.log(
+    `Следующие шаги остановлены до появления "Навчальні журнали" (${config.manualLoginTimeout} ms)`
+  );
+
+  await waitForAnySelector(page, config.selectors.journalsLink, {
+    timeout: config.manualLoginTimeout,
+  });
+
+  console.log('Ручной вход выполнен, продолжаю алгоритм');
+}
+
+async function hasLoginPageMarker(page, config) {
+  try {
+    await waitForAnySelector(page, config.selectors.loginPageMarker, {
+      timeout: 2000,
     });
 
     return true;

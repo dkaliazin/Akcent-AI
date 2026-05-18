@@ -19,6 +19,11 @@ async function launchPersistentBrowser(config) {
     console.log('Использую Chromium из Playwright');
   }
 
+  if (config.browserProfileDirectory) {
+    console.log(`Использую профиль браузера: ${config.browserProfileDirectory}`);
+    launchOptions.args = [`--profile-directory=${config.browserProfileDirectory}`];
+  }
+
   const context = await chromium.launchPersistentContext(config.userDataDir, launchOptions);
 
   context.setDefaultTimeout(config.defaultTimeout);
