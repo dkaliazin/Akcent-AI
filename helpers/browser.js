@@ -4,6 +4,7 @@ const { chromium } = require('playwright');
 
 async function launchPersistentBrowser(config) {
   console.log(`[1/7] Запускаю браузер с persistent profile: ${config.userDataDir}`);
+  logBrowserConfig(config);
 
   validateUserDataDir(config);
   fs.mkdirSync(config.userDataDir, { recursive: true });
@@ -13,6 +14,10 @@ async function launchPersistentBrowser(config) {
     slowMo: config.slowMo,
     viewport: config.viewport,
   };
+
+  if (process.platform === 'win32') {
+    launchOptions.ignoreDefaultArgs = ['--no-sandbox'];
+  }
 
   if (config.browserExecutablePath) {
     console.log(`Использую установленный браузер: ${config.browserExecutablePath}`);
@@ -34,9 +39,33 @@ async function launchPersistentBrowser(config) {
   context.setDefaultTimeout(config.defaultTimeout);
   context.setDefaultNavigationTimeout(config.navigationTimeout);
 
-  const page = context.pages()[0] || await context.newPage();
+  const page = await context.newPage();
+  await closeStartupBlankPages(context, page);
 
   return { context, page };
+}
+
+function logBrowserConfig(config) {
+  console.log(`BROWSER: ${config.browserName || 'playwright-chromium'}`);
+  console.log(`Путь к браузеру: ${config.browserExecutablePath || config.browserChannel || 'Playwright Chromium'}`);
+  console.log(`Источник профиля: ${config.userDataDirSource || 'default'}`);
+  console.log(`Папка профиля: ${config.userDataDir}`);
+
+  if (config.browserProfileDirectory) {
+    console.log(`Имя профиля: ${config.browserProfileDirectory}`);
+  }
+}
+
+async function closeStartupBlankPages(context, activePage) {
+  const pages = context.pages();
+
+  for (const page of pages) {
+    if (page === activePage || page.url() !== 'about:blank') {
+      continue;
+    }
+
+    await page.close().catch(() => {});
+  }
 }
 
 function validateUserDataDir(config) {
