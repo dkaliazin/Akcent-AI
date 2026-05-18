@@ -1,5 +1,7 @@
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const { chromium } = require('playwright');
 
 async function launchPersistentBrowser(config) {
@@ -61,6 +63,10 @@ async function launchPersistentBrowser(config) {
 }
 
 async function connectToExistingBrowser(config) {
+  if (config.autoLaunchChromeCdp) {
+    await launchChromeForCdp(config);
+  }
+
   console.log(`[1/7] Подключаюсь к уже запущенному Chrome: ${config.cdpEndpoint}`);
   logBrowserConfig(config);
 
@@ -84,6 +90,81 @@ async function connectToExistingBrowser(config) {
       console.log('CDP режим: оставляю уже запущенный Chrome открытым');
     },
   };
+}
+
+async function launchChromeForCdp(config) {
+  if (!config.browserExecutablePath) {
+    throw new Error(
+      'Не найден Google Chrome. Укажите BROWSER_EXECUTABLE_PATH или установите Chrome.'
+    );
+  }
+
+  if (!fs.existsSync(config.browserExecutablePath)) {
+    throw new Error(`Chrome executable не найден: ${config.browserExecutablePath}`);
+  }
+
+  validateUserDataDir(config);
+  fs.mkdirSync(config.userDataDir, { recursive: true });
+
+  const args = [
+    `--remote-debugging-port=${config.cdpPort}`,
+    `--user-data-dir=${config.userDataDir}`,
+    'about:blank',
+  ];
+
+  if (config.browserProfileDirectory) {
+    args.push(`--profile-directory=${config.browserProfileDirectory}`);
+  }
+
+  if (config.disableDevToolsDebuggingRestrictions) {
+    args.push('--disable-features=DevToolsDebuggingRestrictions');
+  }
+
+  console.log('Запускаю Chrome с remote debugging автоматически');
+  console.log(`Chrome executable: ${config.browserExecutablePath}`);
+  console.log(`Chrome args: ${args.join(' ')}`);
+
+  const chromeProcess = spawn(config.browserExecutablePath, args, {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+  });
+
+  chromeProcess.unref();
+
+  await waitForCdpEndpoint(config.cdpEndpoint, config.navigationTimeout);
+}
+
+async function waitForCdpEndpoint(endpoint, timeout) {
+  const startedAt = Date.now();
+  const versionUrl = `${endpoint.replace(/\/$/, '')}/json/version`;
+
+  while (Date.now() - startedAt < timeout) {
+    if (await canReadUrl(versionUrl)) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(
+    `Chrome запущен, но CDP endpoint не ответил: ${versionUrl}`
+  );
+}
+
+function canReadUrl(url) {
+  return new Promise((resolve) => {
+    const request = http.get(url, (response) => {
+      response.resume();
+      resolve(response.statusCode >= 200 && response.statusCode < 500);
+    });
+
+    request.on('error', () => resolve(false));
+    request.setTimeout(1000, () => {
+      request.destroy();
+      resolve(false);
+    });
+  });
 }
 
 async function connectOverCdpWithFallbacks(config) {
