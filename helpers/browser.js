@@ -15,8 +15,16 @@ async function launchPersistentBrowser(config) {
   if (config.browserExecutablePath) {
     console.log(`Использую установленный браузер: ${config.browserExecutablePath}`);
     launchOptions.executablePath = config.browserExecutablePath;
+  } else if (config.browserChannel) {
+    console.log(`Использую системный браузер Playwright channel: ${config.browserChannel}`);
+    launchOptions.channel = config.browserChannel;
   } else {
     console.log('Использую Chromium из Playwright');
+  }
+
+  if (config.browserProfileDirectory) {
+    console.log(`Использую профиль браузера: ${config.browserProfileDirectory}`);
+    launchOptions.args = [`--profile-directory=${config.browserProfileDirectory}`];
   }
 
   const context = await chromium.launchPersistentContext(config.userDataDir, launchOptions);

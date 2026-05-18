@@ -59,6 +59,7 @@ BROWSER_EXECUTABLE_PATH=C:\Program Files\Adblock Browser\Application\AdblockBrow
 USER_DATA_DIR=.browser-profile\adblock-browser
 KEEP_BROWSER_OPEN=true
 MANUAL_VERIFICATION_TIMEOUT_MS=300000
+MANUAL_LOGIN_TIMEOUT_MS=600000
 ```
 
 После этого запуск:
@@ -92,9 +93,63 @@ npm start
 
 Не запускайте automation на профиле, который уже открыт в обычном окне браузера: Chromium блокирует профиль, а одновременное использование может повредить данные профиля.
 
+Важно: `BROWSER_EXECUTABLE_PATH` выбирает только программу браузера. Cookies и логин берутся из `USER_DATA_DIR`. Если `USER_DATA_DIR` указывает на `.browser-profile\...`, это отдельный чистый профиль, и в нем нужно один раз войти вручную.
+
+Если нужно попробовать использовать уже существующие cookies Adblock Browser, закройте все обычные окна Adblock Browser и укажите его папку `User Data`:
+
+```dotenv
+BROWSER_EXECUTABLE_PATH=C:\Users\dmitr\AppData\Local\AdblockBrowser\Application\adblockbrowser.exe
+USER_DATA_DIR=C:\Users\dmitr\AppData\Local\AdblockBrowser\User Data
+BROWSER_PROFILE_DIRECTORY=Default
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+Если ваш активный профиль называется не `Default`, откройте `chrome://version` в Adblock Browser и посмотрите значение `Profile Path`. Последняя часть пути обычно и есть `BROWSER_PROFILE_DIRECTORY`, например `Default` или `Profile 1`.
+
+Playwright всегда открывает управляемое окно браузера. Это может выглядеть как новое окно, даже если используется тот же браузер и тот же профиль.
+
+## Запуск через Google Chrome
+
+Если Adblock Browser нужен для обычной работы, можно выделить Google Chrome под automation.
+
+Самый простой `.env` для Chrome:
+
+```dotenv
+BROWSER=chrome
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+В этом режиме бот попробует использовать системный Google Chrome, папку профилей `%LOCALAPPDATA%\Google\Chrome\User Data` и профиль `Default`.
+
+Если нужно указать профиль явно:
+
+```dotenv
+BROWSER=chrome
+CHROME_USER_DATA_DIR=C:\Users\dmitr\AppData\Local\Google\Chrome\User Data
+CHROME_PROFILE_DIRECTORY=Default
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+Для другого профиля замените `CHROME_PROFILE_DIRECTORY`, например:
+
+```dotenv
+CHROME_PROFILE_DIRECTORY=Profile 1
+```
+
+Чтобы узнать точное имя профиля, откройте в Chrome `chrome://version` и посмотрите `Profile Path`. Последняя часть пути - это имя профиля (`Default`, `Profile 1`, `Profile 2` и т.д.).
+
+Перед запуском закройте все обычные окна Google Chrome, если используете реальный профиль Chrome. Если Chrome не закрыт, Playwright может не получить доступ к профилю.
+
 ## Настройки через env
 
+- `BROWSER=chrome` - использовать системный Google Chrome.
 - `BROWSER_EXECUTABLE_PATH=/path/to/browser` - путь к установленному Chromium-based браузеру.
+- `BROWSER_PROFILE_DIRECTORY=Default` - имя профиля внутри `USER_DATA_DIR`.
+- `CHROME_USER_DATA_DIR=C:\Users\...\Google\Chrome\User Data` - папка профилей Google Chrome.
+- `CHROME_PROFILE_DIRECTORY=Default` - имя профиля Google Chrome.
 - `USER_DATA_DIR=.browser-profile/chromium` - папка persistent profile с cookies и сессией.
 - `HEADLESS=true` - запускать Chromium без UI.
 - `KEEP_BROWSER_OPEN=true` - оставить браузер открытым после выполнения.
@@ -103,3 +158,4 @@ npm start
 - `NAVIGATION_TIMEOUT_MS=30000` - timeout навигации.
 - `OPTIONAL_POPUP_TIMEOUT_MS=5000` - timeout ожидания необязательных popup.
 - `MANUAL_VERIFICATION_TIMEOUT_MS=120000` - сколько ждать ручное прохождение security check.
+- `MANUAL_LOGIN_TIMEOUT_MS=600000` - сколько ждать ручной вход, если cookies не сработали.
