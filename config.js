@@ -69,6 +69,18 @@ const getDefaultChromeUserDataDir = () => {
   return path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data');
 };
 
+const getUserDataDirSource = () => {
+  if (process.env.CHROME_USER_DATA_DIR) {
+    return 'CHROME_USER_DATA_DIR';
+  }
+
+  if (process.env.USER_DATA_DIR) {
+    return 'USER_DATA_DIR';
+  }
+
+  return 'default';
+};
+
 module.exports = {
   baseUrl: 'https://nz.ua',
   browserName,
@@ -87,6 +99,7 @@ module.exports = {
         : path.resolve(__dirname, '.browser-profile', 'chromium')
     )
   ),
+  userDataDirSource: getUserDataDirSource(),
   headless: process.env.HEADLESS === 'true',
   slowMo: numberFromEnv('SLOW_MO_MS', 0),
   defaultTimeout: numberFromEnv('DEFAULT_TIMEOUT_MS', 15000),
