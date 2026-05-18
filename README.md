@@ -46,11 +46,49 @@ KEEP_BROWSER_OPEN=true npm start
 
 После ручного входа следующий запуск будет использовать сохраненные cookies.
 
+## Запуск через свой браузер
+
+Если сайт показывает Cloudflare/anti-bot проверку, лучше запускать бота локально на своем компьютере в headed-режиме и вручную пройти проверку один раз. Скрипт подождет, пока после проверки появится кнопка "Увійти до кабінету".
+
+Для Chromium-based браузера можно указать путь к установленному браузеру:
+
+```bash
+BROWSER_EXECUTABLE_PATH="/path/to/browser" npm start
+```
+
+Для Adblock Browser на Windows путь обычно похож на один из этих вариантов:
+
+```powershell
+$env:BROWSER_EXECUTABLE_PATH="C:\Program Files\Adblock Browser\Application\AdblockBrowser.exe"
+npm start
+```
+
+или:
+
+```powershell
+$env:BROWSER_EXECUTABLE_PATH="$env:LOCALAPPDATA\Adblock Browser\Application\AdblockBrowser.exe"
+npm start
+```
+
+Рекомендуется использовать отдельный профиль для automation, а не основной профиль браузера:
+
+```powershell
+$env:BROWSER_EXECUTABLE_PATH="C:\Program Files\Adblock Browser\Application\AdblockBrowser.exe"
+$env:USER_DATA_DIR="$PWD\.browser-profile\adblock-browser"
+$env:KEEP_BROWSER_OPEN="true"
+npm start
+```
+
+Не запускайте automation на профиле, который уже открыт в обычном окне браузера: Chromium блокирует профиль, а одновременное использование может повредить данные профиля.
+
 ## Настройки через env
 
+- `BROWSER_EXECUTABLE_PATH=/path/to/browser` - путь к установленному Chromium-based браузеру.
+- `USER_DATA_DIR=.browser-profile/chromium` - папка persistent profile с cookies и сессией.
 - `HEADLESS=true` - запускать Chromium без UI.
 - `KEEP_BROWSER_OPEN=true` - оставить браузер открытым после выполнения.
 - `SLOW_MO_MS=250` - замедлить действия Playwright.
 - `DEFAULT_TIMEOUT_MS=15000` - общий timeout ожиданий.
 - `NAVIGATION_TIMEOUT_MS=30000` - timeout навигации.
 - `OPTIONAL_POPUP_TIMEOUT_MS=5000` - timeout ожидания необязательных popup.
+- `MANUAL_VERIFICATION_TIMEOUT_MS=120000` - сколько ждать ручное прохождение security check.
