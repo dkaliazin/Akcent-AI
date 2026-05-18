@@ -123,6 +123,8 @@ MANUAL_LOGIN_TIMEOUT_MS=600000
 
 В этом режиме бот попробует использовать системный Google Chrome, папку профилей `%LOCALAPPDATA%\Google\Chrome\User Data` и профиль `Default`.
 
+Не пишите путь к `chrome.exe` в `USER_DATA_DIR` или `CHROME_USER_DATA_DIR`. Эти переменные должны указывать на папку профиля с cookies, например `C:\Users\dmitr\AppData\Local\Google\Chrome\User Data`.
+
 Если нужно указать профиль явно:
 
 ```dotenv
@@ -142,6 +144,16 @@ CHROME_PROFILE_DIRECTORY=Profile 1
 Чтобы узнать точное имя профиля, откройте в Chrome `chrome://version` и посмотрите `Profile Path`. Последняя часть пути - это имя профиля (`Default`, `Profile 1`, `Profile 2` и т.д.).
 
 Перед запуском закройте все обычные окна Google Chrome, если используете реальный профиль Chrome. Если Chrome не закрыт, Playwright может не получить доступ к профилю.
+
+Если видите ошибку `EEXIST: file already exists, mkdir '...\chrome.exe'`, значит в `.env` путь к `chrome.exe` указан как профиль. Исправьте `.env` так:
+
+```dotenv
+BROWSER=chrome
+CHROME_USER_DATA_DIR=C:\Users\dmitr\AppData\Local\Google\Chrome\User Data
+CHROME_PROFILE_DIRECTORY=Default
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
 
 ## Настройки через env
 
