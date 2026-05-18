@@ -4,6 +4,7 @@
   "description": "Playwright automation starter for nz.ua",
   "main": "main.js",
   "scripts": {
+    "app": "node app.js",
     "start": "node main.js",
     "install:browsers": "npx playwright install chromium"
   },
