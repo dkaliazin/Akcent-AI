@@ -1,0 +1,24 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "Playwright automation starter for nz.ua",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "install:browsers": "npx playwright install chromium"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dkaliazin/Akcent-AI.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dkaliazin/Akcent-AI/issues"
+  },
+  "homepage": "https://github.com/dkaliazin/Akcent-AI#readme",
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}
