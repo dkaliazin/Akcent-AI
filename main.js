@@ -10,12 +10,14 @@ const {
 
 async function run() {
   let context;
+  let closeBrowser;
 
   try {
     console.log('Старт automation-бота для nz.ua');
 
     const browser = await launchPersistentBrowser(config);
     context = browser.context;
+    closeBrowser = browser.close;
 
     await openHomePage(browser.page, config);
     await openCabinetLogin(browser.page, config);
@@ -39,6 +41,11 @@ async function run() {
     }
 
     console.log('Закрываю браузер и сохраняю persistent profile');
+    if (closeBrowser) {
+      await closeBrowser();
+      return;
+    }
+
     await context.close();
   }
 }
