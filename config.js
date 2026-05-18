@@ -1,7 +1,11 @@
+const fs = require('node:fs');
 const path = require('node:path');
 const { loadLocalEnv } = require('./helpers/env');
 
 loadLocalEnv();
+
+const browserName = (process.env.BROWSER || '').trim().toLowerCase();
+const isChrome = browserName === 'chrome';
 
 const numberFromEnv = (name, fallback) => {
   const rawValue = process.env[name];
@@ -21,13 +25,67 @@ const pathFromEnv = (name, fallback) => {
   return value ? path.resolve(value) : fallback;
 };
 
+const firstExistingPath = (paths) => paths.find((candidatePath) => {
+  if (!candidatePath) {
+    return false;
+  }
+
+  try {
+    return fs.existsSync(candidatePath);
+  } catch (error) {
+    return false;
+  }
+});
+
+const getDefaultChromeExecutablePath = () => firstExistingPath([
+  process.env.LOCALAPPDATA && path.join(
+    process.env.LOCALAPPDATA,
+    'Google',
+    'Chrome',
+    'Application',
+    'chrome.exe'
+  ),
+  process.env.PROGRAMFILES && path.join(
+    process.env.PROGRAMFILES,
+    'Google',
+    'Chrome',
+    'Application',
+    'chrome.exe'
+  ),
+  process.env['PROGRAMFILES(X86)'] && path.join(
+    process.env['PROGRAMFILES(X86)'],
+    'Google',
+    'Chrome',
+    'Application',
+    'chrome.exe'
+  ),
+]);
+
+const getDefaultChromeUserDataDir = () => {
+  if (!process.env.LOCALAPPDATA) {
+    return undefined;
+  }
+
+  return path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'User Data');
+};
+
 module.exports = {
   baseUrl: 'https://nz.ua',
-  browserExecutablePath: process.env.BROWSER_EXECUTABLE_PATH,
-  browserProfileDirectory: process.env.BROWSER_PROFILE_DIRECTORY,
+  browserName,
+  browserChannel: isChrome && !process.env.BROWSER_EXECUTABLE_PATH ? 'chrome' : undefined,
+  browserExecutablePath: process.env.BROWSER_EXECUTABLE_PATH ||
+    (isChrome ? getDefaultChromeExecutablePath() : undefined),
+  browserProfileDirectory: process.env.CHROME_PROFILE_DIRECTORY ||
+    process.env.BROWSER_PROFILE_DIRECTORY ||
+    (isChrome ? 'Default' : undefined),
   userDataDir: pathFromEnv(
-    'USER_DATA_DIR',
-    path.resolve(__dirname, '.browser-profile', 'chromium')
+    'CHROME_USER_DATA_DIR',
+    pathFromEnv(
+      'USER_DATA_DIR',
+      isChrome
+        ? getDefaultChromeUserDataDir() || path.resolve(__dirname, '.browser-profile', 'chrome')
+        : path.resolve(__dirname, '.browser-profile', 'chromium')
+    )
   ),
   headless: process.env.HEADLESS === 'true',
   slowMo: numberFromEnv('SLOW_MO_MS', 0),

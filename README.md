@@ -109,10 +109,47 @@ MANUAL_LOGIN_TIMEOUT_MS=600000
 
 Playwright всегда открывает управляемое окно браузера. Это может выглядеть как новое окно, даже если используется тот же браузер и тот же профиль.
 
+## Запуск через Google Chrome
+
+Если Adblock Browser нужен для обычной работы, можно выделить Google Chrome под automation.
+
+Самый простой `.env` для Chrome:
+
+```dotenv
+BROWSER=chrome
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+В этом режиме бот попробует использовать системный Google Chrome, папку профилей `%LOCALAPPDATA%\Google\Chrome\User Data` и профиль `Default`.
+
+Если нужно указать профиль явно:
+
+```dotenv
+BROWSER=chrome
+CHROME_USER_DATA_DIR=C:\Users\dmitr\AppData\Local\Google\Chrome\User Data
+CHROME_PROFILE_DIRECTORY=Default
+KEEP_BROWSER_OPEN=true
+MANUAL_LOGIN_TIMEOUT_MS=600000
+```
+
+Для другого профиля замените `CHROME_PROFILE_DIRECTORY`, например:
+
+```dotenv
+CHROME_PROFILE_DIRECTORY=Profile 1
+```
+
+Чтобы узнать точное имя профиля, откройте в Chrome `chrome://version` и посмотрите `Profile Path`. Последняя часть пути - это имя профиля (`Default`, `Profile 1`, `Profile 2` и т.д.).
+
+Перед запуском закройте все обычные окна Google Chrome, если используете реальный профиль Chrome. Если Chrome не закрыт, Playwright может не получить доступ к профилю.
+
 ## Настройки через env
 
+- `BROWSER=chrome` - использовать системный Google Chrome.
 - `BROWSER_EXECUTABLE_PATH=/path/to/browser` - путь к установленному Chromium-based браузеру.
 - `BROWSER_PROFILE_DIRECTORY=Default` - имя профиля внутри `USER_DATA_DIR`.
+- `CHROME_USER_DATA_DIR=C:\Users\...\Google\Chrome\User Data` - папка профилей Google Chrome.
+- `CHROME_PROFILE_DIRECTORY=Default` - имя профиля Google Chrome.
 - `USER_DATA_DIR=.browser-profile/chromium` - папка persistent profile с cookies и сессией.
 - `HEADLESS=true` - запускать Chromium без UI.
 - `KEEP_BROWSER_OPEN=true` - оставить браузер открытым после выполнения.
