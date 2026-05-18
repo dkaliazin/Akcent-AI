@@ -184,6 +184,17 @@ module.exports = {
       'input[name="email"]',
       'input[type="password"]',
     ],
+    loggedInCabinetMarker: [
+      'text=Журнали',
+      'text=Навчальні журнали',
+      'text=Розклад',
+      'text=Вийти',
+      'a:has-text("Журнали")',
+      'a:has-text("Вийти")',
+      '.sidebar',
+      '.side-menu',
+      'nav:has-text("Журнали")',
+    ],
     okPopupButton: [
       'button:has-text("OK")',
       'button:has-text("Ok")',

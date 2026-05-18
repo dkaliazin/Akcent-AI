@@ -16,10 +16,25 @@ async function openHomePage(page, config) {
 async function openCabinetLogin(page, config) {
   console.log('[3/7] Нажимаю "Увійти до кабінету"');
 
-  await clickFirstAvailable(page, config.selectors.cabinetEntry, {
-    description: 'кнопку "Увійти до кабінету"',
-    timeout: config.defaultTimeout,
-  });
+  try {
+    await clickFirstAvailable(page, config.selectors.cabinetEntry, {
+      description: 'кнопку "Увійти до кабінету"',
+      timeout: config.defaultTimeout,
+    });
+  } catch (error) {
+    if (await hasLoggedInCabinetMarker(page, config)) {
+      console.log('Кнопка "Увійти до кабінету" не найдена, потому что кабинет уже открыт');
+      return;
+    }
+
+    if (page.url().startsWith(config.baseUrl)) {
+      console.log('Кнопка "Увійти до кабінету" не найдена, но мы уже на nz.ua. Продолжаю следующий этап.');
+      return;
+    }
+
+    throw error;
+  }
+
   await waitForLoadToSettle(page);
 }
 
@@ -116,6 +131,18 @@ async function hasLoginPageMarker(page, config) {
   try {
     await waitForAnySelector(page, config.selectors.loginPageMarker, {
       timeout: 2000,
+    });
+
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function hasLoggedInCabinetMarker(page, config) {
+  try {
+    await waitForAnySelector(page, config.selectors.loggedInCabinetMarker, {
+      timeout: 3000,
     });
 
     return true;
