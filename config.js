@@ -147,6 +147,12 @@ module.exports = {
   optionalPopupTimeout: numberFromEnv('OPTIONAL_POPUP_TIMEOUT_MS', 5000),
   manualVerificationTimeout: numberFromEnv('MANUAL_VERIFICATION_TIMEOUT_MS', 120000),
   manualLoginTimeout: numberFromEnv('MANUAL_LOGIN_TIMEOUT_MS', 600000),
+  geography7Transfer: {
+    subject: process.env.TRANSFER_SUBJECT || 'Географія',
+    grade: process.env.TRANSFER_GRADE || '7',
+    sourceSemester: process.env.TRANSFER_SOURCE_SEMESTER || '2024-2025 [2]',
+    targetSemester: process.env.TRANSFER_TARGET_SEMESTER || '2025-2026 [2]',
+  },
   viewport: {
     width: 1366,
     height: 768,
@@ -232,6 +238,8 @@ module.exports = {
       'h1:has-text("Навчальні журнали")',
       'h2:has-text("Навчальні журнали")',
       'text=Навчальні журнали',
+      'text=Журнал не знайден',
+      'text=Журнал не найден',
     ],
   },
 };

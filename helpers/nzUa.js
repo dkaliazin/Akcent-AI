@@ -55,9 +55,18 @@ async function openTrainingJournals(page, config) {
   await waitForLoadToSettle(page);
 
   console.log('Ожидаю загрузку страницы "Навчальні журнали"');
-  await waitForAnySelector(page, config.selectors.journalsPageMarker, {
-    timeout: config.defaultTimeout,
-  });
+  try {
+    await waitForAnySelector(page, config.selectors.journalsPageMarker, {
+      timeout: config.defaultTimeout,
+    });
+  } catch (error) {
+    if (page.url().includes('/journal/')) {
+      console.log(`Страница журналов открыта: ${page.url()}`);
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function hasJournalsLink(page, config, timeout = 3000) {
