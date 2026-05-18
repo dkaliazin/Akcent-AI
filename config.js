@@ -4,10 +4,6 @@ const { loadLocalEnv } = require('./helpers/env');
 
 loadLocalEnv();
 
-const browserName = (process.env.BROWSER || '').trim().toLowerCase();
-const isChrome = browserName === 'chrome';
-const cdpEndpoint = process.env.CHROME_CDP_ENDPOINT || process.env.CDP_ENDPOINT;
-
 const booleanFromEnv = (name, fallback) => {
   const rawValue = process.env[name];
 
@@ -29,6 +25,15 @@ const numberFromEnv = (name, fallback) => {
 
   return Number.isFinite(value) ? value : fallback;
 };
+
+const browserName = (process.env.BROWSER || '').trim().toLowerCase();
+const autoLaunchChromeCdp = ['chrome-cdp', 'chrome-cdp-auto'].includes(browserName) ||
+  booleanFromEnv('CHROME_CDP_AUTO_LAUNCH', false);
+const isChrome = browserName === 'chrome' || autoLaunchChromeCdp;
+const cdpPort = numberFromEnv('CHROME_CDP_PORT', 9222);
+const cdpEndpoint = process.env.CHROME_CDP_ENDPOINT ||
+  process.env.CDP_ENDPOINT ||
+  (autoLaunchChromeCdp ? `http://127.0.0.1:${cdpPort}` : undefined);
 
 const pathFromEnv = (name, fallback) => {
   const value = process.env[name];
@@ -94,9 +99,11 @@ const getUserDataDirSource = () => {
 
 module.exports = {
   baseUrl: 'https://nz.ua',
-  browserName: cdpEndpoint ? 'chrome-cdp' : browserName,
+  browserName: autoLaunchChromeCdp ? 'chrome-cdp-auto' : (cdpEndpoint ? 'chrome-cdp' : browserName),
   browserChannel: !cdpEndpoint && isChrome && !process.env.BROWSER_EXECUTABLE_PATH ? 'chrome' : undefined,
   cdpEndpoint,
+  cdpPort,
+  autoLaunchChromeCdp,
   browserExecutablePath: process.env.BROWSER_EXECUTABLE_PATH ||
     (isChrome ? getDefaultChromeExecutablePath() : undefined),
   browserProfileDirectory: process.env.CHROME_PROFILE_DIRECTORY ||
@@ -106,7 +113,9 @@ module.exports = {
     'CHROME_USER_DATA_DIR',
     pathFromEnv(
       'USER_DATA_DIR',
-      isChrome
+      autoLaunchChromeCdp
+        ? path.resolve(__dirname, '.browser-profile', 'chrome-cdp')
+        : isChrome
         ? getDefaultChromeUserDataDir() || path.resolve(__dirname, '.browser-profile', 'chrome')
         : path.resolve(__dirname, '.browser-profile', 'chromium')
     )
