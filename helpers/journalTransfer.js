@@ -346,12 +346,180 @@ async function fillHomeworkEditor(page, sourceRow) {
   await setEditorField(page, 'Домашнє завдання', sourceRow.homework);
 
   await page.locator('button:has-text("Зберегти")').last().click();
-
-  await page.waitForSelector('.modal.show, [role="dialog"]', {
-    state: 'hidden',
-    timeout: 10000,
-  }).catch(() => {});
+  await waitForSaveResult(page, sourceRow);
   await waitForLoadToSettle(page);
+}
+
+async function waitForSaveResult(page, sourceRow) {
+  const deadline = Date.now() + 10000;
+
+  while (Date.now() < deadline) {
+    const state = await getEditorSaveState(page);
+
+    if (!state.modalVisible) {
+      console.log('Запись сохранена, модалка закрылась');
+      return;
+    }
+
+    if (state.errors.length > 0 || state.invalidFields.length > 0) {
+      throw buildSaveValidationError(state, sourceRow);
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  const state = await getEditorSaveState(page);
+
+  if (state.errors.length > 0 || state.invalidFields.length > 0) {
+    throw buildSaveValidationError(state, sourceRow);
+  }
+
+  throw new Error([
+    'После нажатия "Зберегти" модалка не закрылась, но явных validation errors не найдено.',
+    `Урок: ${sourceRow.lessonNumber || '-'}`,
+    `Тема: ${sourceRow.topic || '-'}`,
+    `Домашнее задание: ${sourceRow.homework || '-'}`,
+    state.modalText ? `Текст модалки: ${state.modalText}` : undefined,
+  ].filter(Boolean).join('\n'));
+}
+
+async function getEditorSaveState(page) {
+  return page.evaluate(() => {
+    const modal = findVisibleModal();
+
+    if (!modal) {
+      return {
+        errors: [],
+        invalidFields: [],
+        modalText: '',
+        modalVisible: false,
+      };
+    }
+
+    return {
+      errors: collectValidationErrors(modal),
+      invalidFields: collectInvalidFields(modal),
+      modalText: normalize(modal.textContent || '').slice(0, 700),
+      modalVisible: true,
+    };
+
+    function collectValidationErrors(root) {
+      const selectors = [
+        '.help-block',
+        '.help-block-error',
+        '.invalid-feedback',
+        '.invalid-tooltip',
+        '.form-error',
+        '.field-error',
+        '.error-message',
+        '.text-danger',
+        '.alert-danger',
+        '.has-error .help-block',
+        '[data-error]',
+        '[role="alert"]',
+      ];
+      const messages = [];
+
+      for (const element of root.querySelectorAll(selectors.join(','))) {
+        if (!isVisible(element)) {
+          continue;
+        }
+
+        const text = normalize(element.textContent || element.getAttribute('data-error') || '');
+
+        if (text && text.length <= 300) {
+          messages.push(text);
+        }
+      }
+
+      return unique(messages);
+    }
+
+    function collectInvalidFields(root) {
+      const fields = Array.from(root.querySelectorAll(
+        'input:not([type="hidden"]), textarea, select, [contenteditable="true"]'
+      ));
+      const invalidFields = [];
+
+      for (const field of fields) {
+        const hasInvalidState =
+          field.matches('.is-invalid, .error, [aria-invalid="true"]') ||
+          Boolean(field.closest('.has-error, .field-error, .form-group.has-error')) ||
+          (typeof field.checkValidity === 'function' && !field.checkValidity());
+
+        if (!hasInvalidState || !isVisible(field)) {
+          continue;
+        }
+
+        invalidFields.push(getFieldName(field));
+      }
+
+      return unique(invalidFields);
+    }
+
+    function getFieldName(field) {
+      const id = field.id;
+
+      if (id) {
+        const label = getLabelByFor(id);
+
+        if (label) {
+          return normalize(label.textContent || '');
+        }
+      }
+
+      const row = field.closest('.form-group, .row, div');
+      const labelText = row && Array.from(row.querySelectorAll('label, p, span'))
+        .map((element) => normalize(element.textContent || ''))
+        .find((text) => text && text.length <= 80);
+
+      return labelText || field.getAttribute('name') || field.getAttribute('placeholder') || 'unknown field';
+    }
+
+    function getLabelByFor(id) {
+      if (window.CSS && typeof window.CSS.escape === 'function') {
+        return document.querySelector(`label[for="${window.CSS.escape(id)}"]`);
+      }
+
+      return Array.from(document.querySelectorAll('label[for]'))
+        .find((label) => label.getAttribute('for') === id);
+    }
+
+    function findVisibleModal() {
+      return Array.from(document.querySelectorAll('.modal.show, [role="dialog"], .modal-content'))
+        .find((element) => isVisible(element));
+    }
+
+    function isVisible(element) {
+      const style = window.getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+
+      return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        box.width > 0 &&
+        box.height > 0;
+    }
+
+    function normalize(text) {
+      return text.replace(/\s+/g, ' ').trim();
+    }
+
+    function unique(values) {
+      return [...new Set(values.filter(Boolean))];
+    }
+  });
+}
+
+function buildSaveValidationError(state, sourceRow) {
+  return new Error([
+    'Сайт показал validation error после "Зберегти".',
+    `Урок: ${sourceRow.lessonNumber || '-'}`,
+    `Тема: ${sourceRow.topic || '-'}`,
+    `Домашнее задание: ${sourceRow.homework || '-'}`,
+    state.errors.length > 0 ? `Ошибки: ${state.errors.join(' | ')}` : undefined,
+    state.invalidFields.length > 0 ? `Проблемные поля: ${state.invalidFields.join(' | ')}` : undefined,
+    state.modalText ? `Текст модалки: ${state.modalText}` : undefined,
+  ].filter(Boolean).join('\n'));
 }
 
 async function setEditorField(page, label, value) {
