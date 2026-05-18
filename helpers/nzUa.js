@@ -8,6 +8,7 @@ async function openHomePage(page, config) {
   console.log(`[2/7] Открываю сайт ${config.baseUrl}`);
 
   await page.goto(config.baseUrl, { waitUntil: 'domcontentloaded' });
+  console.log(`Текущий URL после перехода: ${page.url()}`);
   await waitForLoadToSettle(page);
   await waitForManualSecurityCheck(page, config);
 }
