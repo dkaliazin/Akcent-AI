@@ -26,13 +26,28 @@ const numberFromEnv = (name, fallback) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
+const portFromEndpoint = (endpoint, fallback) => {
+  if (!endpoint) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(endpoint);
+    const port = Number(url.port);
+
+    return Number.isFinite(port) && port > 0 ? port : fallback;
+  } catch (error) {
+    return fallback;
+  }
+};
+
 const browserName = (process.env.BROWSER || '').trim().toLowerCase();
 const autoLaunchChromeCdp = ['chrome-cdp', 'chrome-cdp-auto'].includes(browserName) ||
   booleanFromEnv('CHROME_CDP_AUTO_LAUNCH', false);
 const isChrome = browserName === 'chrome' || autoLaunchChromeCdp;
-const cdpPort = numberFromEnv('CHROME_CDP_PORT', 9222);
-const cdpEndpoint = process.env.CHROME_CDP_ENDPOINT ||
-  process.env.CDP_ENDPOINT ||
+const configuredCdpEndpoint = process.env.CHROME_CDP_ENDPOINT || process.env.CDP_ENDPOINT;
+const cdpPort = numberFromEnv('CHROME_CDP_PORT', portFromEndpoint(configuredCdpEndpoint, 9222));
+const cdpEndpoint = configuredCdpEndpoint ||
   (autoLaunchChromeCdp ? `http://127.0.0.1:${cdpPort}` : undefined);
 
 const pathFromEnv = (name, fallback) => {
