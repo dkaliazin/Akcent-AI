@@ -1,5 +1,7 @@
 const http = require('node:http');
 const { spawn } = require('node:child_process');
+const { chromium } = require('playwright');
+const config = require('./config');
 const { loadLocalEnv } = require('./helpers/env');
 
 loadLocalEnv();
@@ -67,15 +69,82 @@ function runJournalsBot() {
   return true;
 }
 
-function stopBot() {
-  if (!state.child) {
+async function stopBot() {
+  let didSomething = false;
+
+  if (state.child) {
+    addLog('Останавливаю текущий запуск');
+    state.child.kill();
+    didSomething = true;
+  }
+
+  const browserClosed = await closeBrowser();
+
+  return didSomething || browserClosed;
+}
+
+async function closeBrowser() {
+  if (!config.cdpEndpoint) {
+    addLog('CDP endpoint не настроен, закрыть браузер из панели нельзя');
     return false;
   }
 
-  addLog('Останавливаю текущий запуск');
-  state.child.kill();
+  addLog(`Пробую закрыть Chrome через CDP: ${config.cdpEndpoint}`);
 
-  return true;
+  try {
+    const browser = await connectOverCdpForStop(config.cdpEndpoint);
+    await browser.close();
+    addLog('Chrome закрыт');
+    return true;
+  } catch (error) {
+    addLog(`Не удалось закрыть Chrome через CDP: ${error.message}`);
+    return false;
+  }
+}
+
+async function connectOverCdpForStop(endpoint) {
+  const endpoints = getCdpEndpointCandidates(endpoint);
+  let lastError;
+
+  const deadline = Date.now() + 5000;
+
+  while (Date.now() < deadline) {
+    for (const candidate of endpoints) {
+      try {
+        return await chromium.connectOverCDP(candidate, {
+          timeout: 1000,
+        });
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw lastError || new Error(`CDP endpoint не доступен: ${endpoint}`);
+}
+
+function getCdpEndpointCandidates(endpoint) {
+  const endpoints = [endpoint];
+
+  try {
+    const url = new URL(endpoint);
+
+    if (url.hostname === 'localhost') {
+      url.hostname = '127.0.0.1';
+      endpoints.push(url.toString().replace(/\/$/, ''));
+    }
+
+    if (url.hostname === '127.0.0.1') {
+      url.hostname = 'localhost';
+      endpoints.push(url.toString().replace(/\/$/, ''));
+    }
+  } catch (error) {
+    return endpoints;
+  }
+
+  return [...new Set(endpoints)];
 }
 
 function sendJson(response, statusCode, payload) {
@@ -94,7 +163,7 @@ function sendHtml(response) {
   response.end(getHtml());
 }
 
-function handleRequest(request, response) {
+async function handleRequest(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
   if (request.method === 'GET' && url.pathname === '/') {
@@ -104,6 +173,7 @@ function handleRequest(request, response) {
 
   if (request.method === 'GET' && url.pathname === '/api/status') {
     sendJson(response, 200, {
+      canCloseBrowser: Boolean(config.cdpEndpoint),
       exitCode: state.exitCode,
       isRunning: state.isRunning,
       logs: state.logs,
@@ -122,10 +192,10 @@ function handleRequest(request, response) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/stop') {
-    const stopped = stopBot();
+    const stopped = await stopBot();
     sendJson(response, stopped ? 202 : 409, {
       isRunning: state.isRunning,
-      message: stopped ? 'Остановка запрошена' : 'Нет активного запуска',
+      message: stopped ? 'Остановка/закрытие запрошены' : 'Нет активного запуска или доступного Chrome',
     });
     return;
   }
@@ -213,7 +283,7 @@ function getHtml() {
     <h1>NZ bot</h1>
     <p>Нажмите кнопку, чтобы открыть раздел "Навчальні журнали".</p>
     <button id="runButton" type="button">Навчальні журнали</button>
-    <button id="stopButton" type="button">Остановить</button>
+    <button id="stopButton" type="button">Остановить / закрыть браузер</button>
     <div id="status" class="status">Статус: загрузка...</div>
     <pre id="logs"></pre>
   </main>
@@ -239,7 +309,7 @@ function getHtml() {
       const status = await response.json();
 
       runButton.disabled = status.isRunning;
-      stopButton.disabled = !status.isRunning;
+      stopButton.disabled = !status.isRunning && !status.canCloseBrowser;
       statusElement.textContent = status.isRunning
         ? 'Статус: выполняется'
         : 'Статус: остановлен' + (status.exitCode === null ? '' : ' (код ' + status.exitCode + ')');
@@ -272,7 +342,12 @@ function getHtml() {
 </html>`;
 }
 
-const server = http.createServer(handleRequest);
+const server = http.createServer((request, response) => {
+  handleRequest(request, response).catch((error) => {
+    addLog(`Ошибка панели: ${error.message}`);
+    sendJson(response, 500, { message: error.message });
+  });
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`NZ bot panel: http://${HOST}:${PORT}`);
