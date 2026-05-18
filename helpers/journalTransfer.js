@@ -46,11 +46,15 @@ async function openJournalForSemester(page, config, semesterText, transferConfig
 async function selectSemester(page, semesterText) {
   console.log(`Выбираю семестр: ${semesterText}`);
 
-  const selected = await page.evaluate((needle) => {
+  const selectedSemester = await page.evaluate((needle) => {
     const normalize = (value) => value.replace(/\s+/g, ' ').trim();
     const normalizedNeedle = normalize(needle);
+    const selects = [
+      ...document.querySelectorAll('#personalselectform-semester_id'),
+      ...document.querySelectorAll('select[name*="semester"], select[id*="semester"], select'),
+    ];
 
-    for (const select of document.querySelectorAll('select')) {
+    for (const select of [...new Set(selects)]) {
       const option = Array.from(select.options).find((item) =>
         normalize(item.textContent || '').includes(normalizedNeedle)
       );
@@ -63,18 +67,23 @@ async function selectSemester(page, semesterText) {
       select.dispatchEvent(new Event('input', { bubbles: true }));
       select.dispatchEvent(new Event('change', { bubbles: true }));
 
-      return true;
+      return normalize(option.textContent || '');
     }
 
-    return false;
+    return null;
   }, semesterText);
 
-  if (selected) {
+  if (selectedSemester) {
+    console.log(`Выбран семестр: ${selectedSemester}`);
+    await waitForLoadToSettle(page);
+    await page.waitForTimeout(1000);
     return;
   }
 
   await page.locator('text=Семестр').first().click();
   await page.locator(`text=${semesterText}`).first().click();
+  await waitForLoadToSettle(page);
+  await page.waitForTimeout(1000);
 }
 
 async function selectJournalFromList(page, config, subject, grade) {
@@ -328,12 +337,17 @@ async function openHomeworkEditor(page, rowIndex) {
 }
 
 async function fillHomeworkEditor(page, sourceRow) {
+  await page.waitForSelector('.modal.show, [role="dialog"], text=Домашнє завдання', {
+    timeout: 10000,
+  });
+
   await setEditorField(page, 'Тема уроку', sourceRow.topic);
   await setEditorField(page, '№ уроку', sourceRow.lessonNumber);
   await setEditorField(page, 'Домашнє завдання', sourceRow.homework);
 
   await page.locator('button:has-text("Зберегти")').last().click();
-  await page.waitForSelector('text=Домашнє завдання', {
+
+  await page.waitForSelector('.modal.show, [role="dialog"]', {
     state: 'hidden',
     timeout: 10000,
   }).catch(() => {});
@@ -430,9 +444,19 @@ async function setEditorField(page, label, value) {
       if (element.isContentEditable) {
         element.textContent = fieldValue;
       } else {
-        element.value = fieldValue;
+        const prototype = element.tagName === 'TEXTAREA'
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+
+        if (descriptor && descriptor.set) {
+          descriptor.set.call(element, fieldValue);
+        } else {
+          element.value = fieldValue;
+        }
       }
 
+      element.focus();
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
       element.dispatchEvent(new Event('blur', { bubbles: true }));
@@ -505,6 +529,16 @@ async function clickPaginationNumber(page, pageNumber) {
   if (!clicked) {
     throw new Error(`Не удалось перейти на страницу ${pageNumber}`);
   }
+
+  await page.waitForFunction((targetNumber) => {
+    const activeText = Array.from(document.querySelectorAll('.pagination .active, [aria-current="page"], .active'))
+      .map((element) => (element.textContent || '').trim())
+      .find((text) => text === String(targetNumber));
+
+    return Boolean(activeText) || window.location.href.includes(`page=${targetNumber}`);
+  }, pageNumber, {
+    timeout: 10000,
+  }).catch(() => {});
 }
 
 module.exports = {
