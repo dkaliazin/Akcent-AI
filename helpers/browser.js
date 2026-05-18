@@ -64,11 +64,7 @@ async function connectToExistingBrowser(config) {
   console.log(`[1/7] Подключаюсь к уже запущенному Chrome: ${config.cdpEndpoint}`);
   logBrowserConfig(config);
 
-  const browser = await chromium.connectOverCDP(config.cdpEndpoint, {
-    noDefaults: true,
-    slowMo: config.slowMo,
-    timeout: config.navigationTimeout,
-  });
+  const browser = await connectOverCdpWithFallbacks(config);
 
   const context = browser.contexts()[0];
 
@@ -88,6 +84,67 @@ async function connectToExistingBrowser(config) {
       console.log('CDP режим: оставляю уже запущенный Chrome открытым');
     },
   };
+}
+
+async function connectOverCdpWithFallbacks(config) {
+  const endpoints = getCdpEndpointCandidates(config.cdpEndpoint);
+  let lastError;
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`Пробую CDP endpoint: ${endpoint}`);
+
+      return await chromium.connectOverCDP(endpoint, {
+        noDefaults: true,
+        slowMo: config.slowMo,
+        timeout: config.navigationTimeout,
+      });
+    } catch (error) {
+      lastError = error;
+      console.log(`Не удалось подключиться к ${endpoint}: ${error.message}`);
+    }
+  }
+
+  throw new Error(buildCdpConnectionError(config.cdpEndpoint, endpoints, lastError));
+}
+
+function getCdpEndpointCandidates(endpoint) {
+  const endpoints = [endpoint];
+
+  try {
+    const url = new URL(endpoint);
+
+    if (url.hostname === 'localhost') {
+      url.hostname = '127.0.0.1';
+      endpoints.push(url.toString().replace(/\/$/, ''));
+    }
+
+    if (url.hostname === '127.0.0.1') {
+      url.hostname = 'localhost';
+      endpoints.push(url.toString().replace(/\/$/, ''));
+    }
+  } catch (error) {
+    return endpoints;
+  }
+
+  return [...new Set(endpoints)];
+}
+
+function buildCdpConnectionError(originalEndpoint, attemptedEndpoints, lastError) {
+  return [
+    `Не удалось подключиться к Chrome CDP endpoint: ${originalEndpoint}`,
+    `Пробовал: ${attemptedEndpoints.join(', ')}`,
+    lastError ? `Последняя ошибка: ${lastError.message}` : undefined,
+    '',
+    'Проверьте, что Chrome запущен с remote debugging:',
+    '& "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:LOCALAPPDATA\\Google\\Chrome\\User Data" --profile-directory="Default"',
+    '',
+    'Потом откройте в Chrome: http://127.0.0.1:9222/json/version',
+    'Если JSON не открывается, бот тоже не сможет подключиться.',
+    '',
+    'В .env лучше использовать:',
+    'CHROME_CDP_ENDPOINT=http://127.0.0.1:9222',
+  ].filter(Boolean).join('\n');
 }
 
 function logBrowserConfig(config) {
