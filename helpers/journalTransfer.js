@@ -130,13 +130,14 @@ async function collectHomeworkRows(page, config) {
     console.log(`Страница ${pageIndex}: найдено строк ${pageRows.length}`);
     rows.push(...pageRows);
 
-    const nextPage = await getNextPaginationNumber(page);
+    const nextPage = await getNextPaginationNumber(page, pageIndex);
 
     if (!nextPage) {
       break;
     }
 
-    await clickPaginationNumber(page, nextPage);
+    const previousSignature = await getHomeworkPageSignature(page);
+    await clickPaginationNumber(page, nextPage, previousSignature);
     await waitForLoadToSettle(page);
   }
 
@@ -167,14 +168,15 @@ async function fillHomeworkRows(page, config, sourceRows) {
       break;
     }
 
-    const nextPage = await getNextPaginationNumber(page);
+    const nextPage = await getNextPaginationNumber(page, pageIndex);
 
     if (!nextPage) {
       console.log('Следующая страница не найдена, оставшиеся строки не заполнены');
       break;
     }
 
-    await clickPaginationNumber(page, nextPage);
+    const previousSignature = await getHomeworkPageSignature(page);
+    await clickPaginationNumber(page, nextPage, previousSignature);
     await waitForLoadToSettle(page);
   }
 
@@ -185,40 +187,78 @@ async function waitForHomeworkTable(page, config) {
   await page.waitForSelector('text=Теми уроків та домашні завдання', {
     timeout: config.defaultTimeout,
   });
-  await page.waitForSelector('table', {
+  await page.waitForSelector('.homework-table, table', {
     timeout: config.defaultTimeout,
   });
 }
 
 async function extractHomeworkRowsFromCurrentPage(page) {
   return page.evaluate(() => {
-    const table = findHomeworkTable();
+    const homeworkGrid = findHomeworkGrid();
 
-    if (!table) {
+    if (!homeworkGrid) {
       return [];
     }
 
-    const headers = getHeaderTexts(table);
-    const indexes = getHomeworkColumnIndexes(headers);
-    const rows = Array.from(table.querySelectorAll('tbody tr, tr')).filter((row) =>
-      row.querySelectorAll('td').length > 0
-    );
+    if (homeworkGrid.kind === 'div') {
+      return extractRowsFromDivGrid(homeworkGrid.element);
+    }
 
-    return rows.map((row) => {
-      const cells = Array.from(row.querySelectorAll('td'));
+    return extractRowsFromTable(homeworkGrid.element);
 
-      return {
-        homework: getCellText(cells[indexes.homework]),
-        lessonNumber: getCellText(cells[indexes.lessonNumber]),
-        topic: getCellText(cells[indexes.topic]),
-      };
-    }).filter((row) => row.homework || row.lessonNumber || row.topic);
+    function extractRowsFromDivGrid(grid) {
+      const rows = Array.from(grid.querySelectorAll('.homework-row'))
+        .filter((row) =>
+          !row.classList.contains('homework-row--header') &&
+          row.querySelectorAll('.homework__item, [class*="homework__item"]').length > 0
+        );
 
-    function findHomeworkTable() {
-      return Array.from(document.querySelectorAll('table')).find((candidate) => {
+      return rows.map((row) => {
+        const cells = Array.from(row.querySelectorAll('.homework__item, [class*="homework__item"]'));
+
+        return {
+          homework: getCellText(cells[6]),
+          lessonNumber: getCellText(cells[2]),
+          topic: getCellText(cells[4]),
+        };
+      }).filter((row) => row.homework || row.lessonNumber || row.topic);
+    }
+
+    function extractRowsFromTable(table) {
+      const headers = getHeaderTexts(table);
+      const indexes = getHomeworkColumnIndexes(headers);
+      const rows = Array.from(table.querySelectorAll('tbody tr, tr')).filter((row) =>
+        row.querySelectorAll('td').length > 0
+      );
+
+      return rows.map((row) => {
+        const cells = Array.from(row.querySelectorAll('td'));
+
+        return {
+          homework: getCellText(cells[indexes.homework]),
+          lessonNumber: getCellText(cells[indexes.lessonNumber]),
+          topic: getCellText(cells[indexes.topic]),
+        };
+      }).filter((row) => row.homework || row.lessonNumber || row.topic);
+    }
+
+    function findHomeworkGrid() {
+      const divGrid = Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+
+      if (divGrid) {
+        return { element: divGrid, kind: 'div' };
+      }
+
+      const table = Array.from(document.querySelectorAll('table')).find((candidate) => {
         const text = normalize(candidate.textContent || '').toLowerCase();
         return text.includes('тема уроку') && text.includes('домашнє завдання');
       });
+
+      return table ? { element: table, kind: 'table' } : null;
     }
 
     function getHeaderTexts(tableElement) {
@@ -251,11 +291,49 @@ async function extractHomeworkRowsFromCurrentPage(page) {
   });
 }
 
+async function getHomeworkPageSignature(page) {
+  return page.evaluate(() => {
+    const root = findHomeworkRoot();
+
+    if (!root) {
+      return '';
+    }
+
+    return normalize(root.textContent || '').slice(0, 500);
+
+    function findHomeworkRoot() {
+      return Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"], table'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+
+    function normalize(value) {
+      return value.replace(/\s+/g, ' ').trim();
+    }
+  });
+}
+
 async function getEditableRowsCount(page) {
   return page.evaluate(() => {
     return getHomeworkRows().length;
 
     function getHomeworkRows() {
+      const divGrid = Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+
+      if (divGrid) {
+        return Array.from(divGrid.querySelectorAll('.homework-row'))
+          .filter((row) =>
+            !row.classList.contains('homework-row--header') &&
+            row.querySelectorAll('.homework__item, [class*="homework__item"]').length > 0
+          );
+      }
+
       const table = Array.from(document.querySelectorAll('table')).find((candidate) => {
         const text = normalize(candidate.textContent || '').toLowerCase();
         return text.includes('тема уроку') && text.includes('домашнє завдання');
@@ -285,9 +363,11 @@ async function openHomeworkEditor(page, rowIndex) {
       return false;
     }
 
-    const firstCell = row.querySelector('td');
+    const firstCell = row.querySelector('.homework__item, [class*="homework__item"], td');
     const editElement = firstCell && (
-      (firstCell.matches('.homework_item, [class*="homework"]') ? firstCell : null) ||
+      (firstCell.matches('.homework__item, [class*="homework__item"], .homework_item, [class*="homework"]') ? firstCell : null) ||
+      firstCell.querySelector('.homework__item') ||
+      firstCell.querySelector('[class*="homework__item"]') ||
       firstCell.querySelector('.homework_item') ||
       firstCell.querySelector('[class*="homework"]') ||
       firstCell.querySelector('a') ||
@@ -308,6 +388,20 @@ async function openHomeworkEditor(page, rowIndex) {
     return true;
 
     function getHomeworkRows() {
+      const divGrid = Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+
+      if (divGrid) {
+        return Array.from(divGrid.querySelectorAll('.homework-row'))
+          .filter((tableRow) =>
+            !tableRow.classList.contains('homework-row--header') &&
+            tableRow.querySelectorAll('.homework__item, [class*="homework__item"]').length > 0
+          );
+      }
+
       const table = Array.from(document.querySelectorAll('table')).find((candidate) => {
         const text = normalize(candidate.textContent || '').toLowerCase();
         return text.includes('тема уроку') && text.includes('домашнє завдання');
@@ -650,8 +744,8 @@ async function setEditorField(page, label, value) {
   }
 }
 
-async function getNextPaginationNumber(page) {
-  return page.evaluate(() => {
+async function getNextPaginationNumber(page, currentPageFallback = 1) {
+  return page.evaluate((fallbackCurrentPage) => {
     const scope = findHomeworkPaginationScope();
     const numbers = Array.from(scope.querySelectorAll('a, button, li'))
       .map((element) => Number((element.textContent || '').trim()))
@@ -664,21 +758,21 @@ async function getNextPaginationNumber(page) {
     const activeText = Array.from(scope.querySelectorAll('.active, [aria-current="page"]'))
       .map((element) => Number((element.textContent || '').trim()))
       .find((number) => Number.isInteger(number) && number > 0);
-    const current = activeText || Math.min(...numbers);
+    const current = activeText || fallbackCurrentPage || Math.min(...numbers);
     const next = [...new Set(numbers)].sort((a, b) => a - b).find((number) => number > current);
 
     return next || null;
 
     function findHomeworkPaginationScope() {
-      const table = findHomeworkTable();
+      const homeworkRoot = findHomeworkRoot();
       const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
         .filter((element) => /\b\d+\b/.test(element.textContent || '') && isVisible(element));
 
-      if (!table || containers.length === 0) {
+      if (!homeworkRoot || containers.length === 0) {
         return containers[0] || document;
       }
 
-      const tableBox = table.getBoundingClientRect();
+      const tableBox = homeworkRoot.getBoundingClientRect();
       const afterTable = containers
         .map((element) => ({
           distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
@@ -691,11 +785,24 @@ async function getNextPaginationNumber(page) {
       return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
     }
 
+    function findHomeworkRoot() {
+      return findHomeworkDivGrid() || findHomeworkTable();
+    }
+
+    function findHomeworkDivGrid() {
+      return Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+
     function findHomeworkTable() {
-      return Array.from(document.querySelectorAll('table')).find((candidate) => {
-        const text = normalize(candidate.textContent || '').toLowerCase();
-        return text.includes('тема уроку') && text.includes('домашнє завдання');
-      });
+      return Array.from(document.querySelectorAll('table'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
     }
 
     function isVisible(element) {
@@ -711,10 +818,10 @@ async function getNextPaginationNumber(page) {
     function normalize(value) {
       return value.replace(/\s+/g, ' ').trim();
     }
-  });
+  }, currentPageFallback);
 }
 
-async function clickPaginationNumber(page, pageNumber) {
+async function clickPaginationNumber(page, pageNumber, previousSignature = '') {
   const clicked = await page.evaluate((targetNumber) => {
     const scope = findHomeworkPaginationScope();
     const element = Array.from(scope.querySelectorAll('a, button'))
@@ -733,15 +840,15 @@ async function clickPaginationNumber(page, pageNumber) {
     return true;
 
     function findHomeworkPaginationScope() {
-      const table = findHomeworkTable();
+      const homeworkRoot = findHomeworkRoot();
       const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
         .filter((elementCandidate) => /\b\d+\b/.test(elementCandidate.textContent || '') && isVisible(elementCandidate));
 
-      if (!table || containers.length === 0) {
+      if (!homeworkRoot || containers.length === 0) {
         return containers[0] || document;
       }
 
-      const tableBox = table.getBoundingClientRect();
+      const tableBox = homeworkRoot.getBoundingClientRect();
       const afterTable = containers
         .map((elementCandidate) => ({
           distance: Math.abs(elementCandidate.getBoundingClientRect().top - tableBox.bottom),
@@ -754,11 +861,24 @@ async function clickPaginationNumber(page, pageNumber) {
       return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
     }
 
+    function findHomeworkRoot() {
+      return findHomeworkDivGrid() || findHomeworkTable();
+    }
+
+    function findHomeworkDivGrid() {
+      return Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+
     function findHomeworkTable() {
-      return Array.from(document.querySelectorAll('table')).find((candidate) => {
-        const text = normalize(candidate.textContent || '').toLowerCase();
-        return text.includes('тема уроку') && text.includes('домашнє завдання');
-      });
+      return Array.from(document.querySelectorAll('table'))
+        .find((candidate) => {
+          const text = normalize(candidate.textContent || '').toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
     }
 
     function isVisible(elementCandidate) {
@@ -780,27 +900,29 @@ async function clickPaginationNumber(page, pageNumber) {
     throw new Error(`Не удалось перейти на страницу ${pageNumber}`);
   }
 
-  await page.waitForFunction((targetNumber) => {
+  await page.waitForFunction(({ pageNumber: targetNumber, previousSignature: previousPageSignature }) => {
     const scope = findHomeworkPaginationScope();
     const activeText = Array.from(scope.querySelectorAll('.active, [aria-current="page"]'))
       .map((element) => (element.textContent || '').trim())
       .find((text) => text === String(targetNumber));
 
-    return Boolean(activeText) || window.location.href.includes(`page=${targetNumber}`);
+    const root = findHomeworkRoot();
+    const signature = root ? (root.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 500) : '';
+
+    return Boolean(activeText) ||
+      window.location.href.includes(`page=${targetNumber}`) ||
+      (previousPageSignature && signature && signature !== previousPageSignature);
 
     function findHomeworkPaginationScope() {
-      const table = Array.from(document.querySelectorAll('table')).find((candidate) => {
-        const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        return text.includes('тема уроку') && text.includes('домашнє завдання');
-      });
+      const homeworkRoot = findHomeworkRoot();
       const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
         .filter((element) => /\b\d+\b/.test(element.textContent || ''));
 
-      if (!table || containers.length === 0) {
+      if (!homeworkRoot || containers.length === 0) {
         return containers[0] || document;
       }
 
-      const tableBox = table.getBoundingClientRect();
+      const tableBox = homeworkRoot.getBoundingClientRect();
       const afterTable = containers
         .map((element) => ({
           distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
@@ -812,7 +934,30 @@ async function clickPaginationNumber(page, pageNumber) {
 
       return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
     }
-  }, pageNumber, {
+
+    function findHomeworkRoot() {
+      return findHomeworkDivGrid() || findHomeworkTable();
+    }
+
+    function findHomeworkDivGrid() {
+      return Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"]'))
+        .find((candidate) => {
+          const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+
+    function findHomeworkTable() {
+      return Array.from(document.querySelectorAll('table'))
+        .find((candidate) => {
+          const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+  }, {
+    pageNumber,
+    previousSignature,
+  }, {
     timeout: 10000,
   }).catch(() => {});
 }
