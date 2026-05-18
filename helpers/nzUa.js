@@ -9,6 +9,7 @@ async function openHomePage(page, config) {
 
   await page.goto(config.baseUrl, { waitUntil: 'domcontentloaded' });
   await waitForLoadToSettle(page);
+  await waitForManualSecurityCheck(page, config);
 }
 
 async function openCabinetLogin(page, config) {
@@ -66,6 +67,27 @@ async function hasJournalsLink(page, config) {
   } catch (error) {
     return false;
   }
+}
+
+async function waitForManualSecurityCheck(page, config) {
+  try {
+    await waitForAnySelector(page, config.selectors.securityCheckPage, {
+      timeout: 2000,
+    });
+  } catch (error) {
+    return;
+  }
+
+  console.log(
+    'Обнаружена проверка безопасности. Пройдите ее вручную в открытом браузере.'
+  );
+  console.log(
+    `Жду появления кнопки "Увійти до кабінету" до ${config.manualVerificationTimeout} ms`
+  );
+
+  await waitForAnySelector(page, config.selectors.cabinetEntry, {
+    timeout: config.manualVerificationTimeout,
+  });
 }
 
 module.exports = {
