@@ -19,7 +19,6 @@
   },
   "homepage": "https://github.com/dkaliazin/Akcent-AI#readme",
   "dependencies": {
-    "dotenv": "^17.4.2",
     "playwright": "^1.60.0"
   }
 }

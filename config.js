@@ -1,6 +1,7 @@
-require('dotenv').config({ quiet: true });
-
 const path = require('node:path');
+const { loadLocalEnv } = require('./helpers/env');
+
+loadLocalEnv();
 
 const numberFromEnv = (name, fallback) => {
   const rawValue = process.env[name];
