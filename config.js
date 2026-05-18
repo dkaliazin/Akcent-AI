@@ -1,3 +1,5 @@
+require('dotenv').config({ quiet: true });
+
 const path = require('node:path');
 
 const numberFromEnv = (name, fallback) => {

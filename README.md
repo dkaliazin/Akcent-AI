@@ -50,13 +50,24 @@ KEEP_BROWSER_OPEN=true npm start
 
 Если сайт показывает Cloudflare/anti-bot проверку, лучше запускать бота локально на своем компьютере в headed-режиме и вручную пройти проверку один раз. Скрипт подождет, пока после проверки появится кнопка "Увійти до кабінету".
 
-Для Chromium-based браузера можно указать путь к установленному браузеру:
+Можно передавать настройки через переменные окружения или создать локальный файл `.env` в корне проекта. Файл `.env` уже добавлен в `.gitignore`, не коммитьте его.
 
-```bash
-BROWSER_EXECUTABLE_PATH="/path/to/browser" npm start
+Пример локального `.env`:
+
+```dotenv
+BROWSER_EXECUTABLE_PATH=C:\Program Files\Adblock Browser\Application\AdblockBrowser.exe
+USER_DATA_DIR=.browser-profile\adblock-browser
+KEEP_BROWSER_OPEN=true
+MANUAL_VERIFICATION_TIMEOUT_MS=300000
 ```
 
-Для Adblock Browser на Windows путь обычно похож на один из этих вариантов:
+После этого запуск:
+
+```bash
+npm start
+```
+
+Если не хотите создавать `.env`, можно задать переменные прямо в PowerShell. Для Adblock Browser на Windows путь обычно похож на один из этих вариантов:
 
 ```powershell
 $env:BROWSER_EXECUTABLE_PATH="C:\Program Files\Adblock Browser\Application\AdblockBrowser.exe"
