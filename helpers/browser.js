@@ -67,7 +67,8 @@ async function connectToExistingBrowser(config) {
     await launchChromeForCdp(config);
   }
 
-  console.log(`[1/7] Подключаюсь к уже запущенному Chrome: ${config.cdpEndpoint}`);
+  const launchMode = config.autoLaunchChromeCdp ? 'автоматически запущенному Chrome' : 'уже запущенному Chrome';
+  console.log(`[1/7] Подключаюсь к ${launchMode}: ${config.cdpEndpoint}`);
   logBrowserConfig(config);
 
   const browser = await connectOverCdpWithFallbacks(config);
@@ -81,7 +82,7 @@ async function connectToExistingBrowser(config) {
   context.setDefaultTimeout(config.defaultTimeout);
   context.setDefaultNavigationTimeout(config.navigationTimeout);
 
-  const page = context.pages()[0] || await context.newPage();
+  const page = await getCdpAutomationPage(context);
 
   return {
     context,
@@ -105,6 +106,11 @@ async function launchChromeForCdp(config) {
 
   validateUserDataDir(config);
   fs.mkdirSync(config.userDataDir, { recursive: true });
+
+  if (await isCdpEndpointReady(config.cdpEndpoint)) {
+    console.log(`Chrome CDP endpoint уже доступен, переиспользую: ${config.cdpEndpoint}`);
+    return;
+  }
 
   const args = [
     `--remote-debugging-port=${config.cdpPort}`,
@@ -137,10 +143,9 @@ async function launchChromeForCdp(config) {
 
 async function waitForCdpEndpoint(endpoint, timeout) {
   const startedAt = Date.now();
-  const versionUrl = `${endpoint.replace(/\/$/, '')}/json/version`;
 
   while (Date.now() - startedAt < timeout) {
-    if (await canReadUrl(versionUrl)) {
+    if (await isCdpEndpointReady(endpoint)) {
       return;
     }
 
@@ -148,8 +153,26 @@ async function waitForCdpEndpoint(endpoint, timeout) {
   }
 
   throw new Error(
-    `Chrome запущен, но CDP endpoint не ответил: ${versionUrl}`
+    `Chrome запущен, но CDP endpoint не ответил: ${getCdpEndpointCandidates(endpoint).join(', ')}`
   );
+}
+
+async function isCdpEndpointReady(endpoint) {
+  for (const candidate of getCdpEndpointCandidates(endpoint)) {
+    const versionUrl = `${candidate.replace(/\/$/, '')}/json/version`;
+
+    if (await canReadUrl(versionUrl)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function getCdpAutomationPage(context) {
+  const blankPage = context.pages().find((page) => page.url() === 'about:blank');
+
+  return blankPage || await context.newPage();
 }
 
 function canReadUrl(url) {
