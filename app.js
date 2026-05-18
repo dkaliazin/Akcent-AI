@@ -32,7 +32,7 @@ function addLog(message) {
   }
 }
 
-function runJournalsBot() {
+function runBot(scriptName, label) {
   if (state.isRunning) {
     return false;
   }
@@ -42,9 +42,9 @@ function runJournalsBot() {
   state.logs = [];
   state.startedAt = new Date().toISOString();
 
-  addLog('Запускаю действие: Навчальні журнали');
+  addLog(`Запускаю действие: ${label}`);
 
-  const child = spawn(process.execPath, ['main.js'], {
+  const child = spawn(process.execPath, [scriptName], {
     cwd: __dirname,
     env: process.env,
     shell: false,
@@ -67,6 +67,14 @@ function runJournalsBot() {
   });
 
   return true;
+}
+
+function runJournalsBot() {
+  return runBot('main.js', 'Навчальні журнали');
+}
+
+function runGeography7Transfer() {
+  return runBot('fill-geography7.js', 'Заповнити Географія 7');
 }
 
 async function stopBot() {
@@ -191,6 +199,15 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/fill-geography7') {
+    const started = runGeography7Transfer();
+    sendJson(response, started ? 202 : 409, {
+      isRunning: state.isRunning,
+      message: started ? 'Запуск начат' : 'Бот уже выполняется',
+    });
+    return;
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/stop') {
     const stopped = await stopBot();
     sendJson(response, stopped ? 202 : 409, {
@@ -256,6 +273,11 @@ function getHtml() {
       color: #052e16;
     }
 
+    #fillGeoButton {
+      background: #f59e0b;
+      color: #451a03;
+    }
+
     #stopButton {
       background: #ef4444;
       color: #450a0a;
@@ -283,12 +305,14 @@ function getHtml() {
     <h1>NZ bot</h1>
     <p>Нажмите кнопку, чтобы открыть раздел "Навчальні журнали".</p>
     <button id="runButton" type="button">Навчальні журнали</button>
+    <button id="fillGeoButton" type="button">Заповнити Географія 7</button>
     <button id="stopButton" type="button">Остановить / закрыть браузер</button>
     <div id="status" class="status">Статус: загрузка...</div>
     <pre id="logs"></pre>
   </main>
   <script>
     const runButton = document.getElementById('runButton');
+    const fillGeoButton = document.getElementById('fillGeoButton');
     const stopButton = document.getElementById('stopButton');
     const statusElement = document.getElementById('status');
     const logsElement = document.getElementById('logs');
@@ -309,6 +333,7 @@ function getHtml() {
       const status = await response.json();
 
       runButton.disabled = status.isRunning;
+      fillGeoButton.disabled = status.isRunning;
       stopButton.disabled = !status.isRunning && !status.canCloseBrowser;
       statusElement.textContent = status.isRunning
         ? 'Статус: выполняется'
@@ -320,6 +345,19 @@ function getHtml() {
     runButton.addEventListener('click', async () => {
       try {
         await postJson('/api/run-journals');
+        await refreshStatus();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    fillGeoButton.addEventListener('click', async () => {
+      if (!confirm('Запустить тестовое заполнение Географія 7?')) {
+        return;
+      }
+
+      try {
+        await postJson('/api/fill-geography7');
         await refreshStatus();
       } catch (error) {
         alert(error.message);
