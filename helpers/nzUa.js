@@ -50,11 +50,23 @@ async function clickLoginButton(page, config) {
   } catch (error) {
     const journalsLinkVisible = await hasJournalsLink(page, config, 3000);
 
-    if (!journalsLinkVisible) {
-      throw error;
+    if (journalsLinkVisible) {
+      console.log('Кнопка входа не найдена, потому что активная сессия уже открыта');
+      await waitForCabinetAccess(page, config);
+      return;
     }
 
-    console.log('Кнопка входа не найдена, потому что активная сессия уже открыта');
+    if (await hasLoggedInCabinetMarker(page, config)) {
+      console.log('Кнопка входа не найдена, но кабинет уже открыт. Продолжаю алгоритм.');
+      return;
+    }
+
+    if (page.url().startsWith(config.baseUrl) && !(await hasLoginPageMarker(page, config))) {
+      console.log('Кнопка входа не найдена, но мы уже на nz.ua не на форме входа. Продолжаю алгоритм.');
+      return;
+    }
+
+    throw error;
   }
 
   await waitForCabinetAccess(page, config);

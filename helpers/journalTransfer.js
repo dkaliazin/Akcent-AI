@@ -11,6 +11,7 @@ async function transferGeography7Homework(page, config) {
   console.log(`Цель: ${transferConfig.targetSemester}`);
 
   await openJournalForSemester(page, config, transferConfig.sourceSemester, transferConfig);
+  await goToFirstHomeworkPage(page);
   const sourceRows = await collectHomeworkRows(page, config);
 
   if (sourceRows.length === 0) {
@@ -20,9 +21,25 @@ async function transferGeography7Homework(page, config) {
   console.log(`Прочитано строк из источника: ${sourceRows.length}`);
 
   await openJournalForSemester(page, config, transferConfig.targetSemester, transferConfig);
+  await goToFirstHomeworkPage(page);
   await fillHomeworkRows(page, config, sourceRows);
 
   console.log('Перенос тем и домашних заданий завершен');
+}
+
+async function clearGeography7Homework(page, config) {
+  const transferConfig = config.geography7Transfer;
+
+  console.log(
+    `Старт очистки тем и домашних заданий: ${transferConfig.subject} ${transferConfig.grade} класс`
+  );
+  console.log(`Семестр: ${transferConfig.targetSemester}`);
+
+  await openJournalForSemester(page, config, transferConfig.targetSemester, transferConfig);
+  await goToFirstHomeworkPage(page);
+  await clearHomeworkRows(page, config);
+
+  console.log('Очистка тем и домашних заданий завершена');
 }
 
 async function openJournalForSemester(page, config, semesterText, transferConfig) {
@@ -182,6 +199,47 @@ async function fillHomeworkRows(page, config, sourceRows) {
   console.log(`Заполнено строк: ${sourceIndex}/${sourceRows.length}`);
 }
 
+async function clearHomeworkRows(page, config) {
+  let clearedCount = 0;
+
+  for (let pageIndex = 1; pageIndex <= 20; pageIndex += 1) {
+    await waitForHomeworkTable(page, config);
+
+    const pageRows = await extractHomeworkRowsFromCurrentPage(page);
+    const rowCount = await getEditableRowsCount(page);
+    console.log(`Страница очистки ${pageIndex}: доступно строк ${rowCount}`);
+
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const currentRow = pageRows[rowIndex] || {};
+
+      if (!currentRow.topic && !currentRow.homework) {
+        console.log(`Строка ${rowIndex + 1}: тема и домашнее уже пустые, пропускаю`);
+        continue;
+      }
+
+      console.log(
+        `Очищаю строку ${clearedCount + 1}: урок ${currentRow.lessonNumber || '-'}`
+      );
+
+      await openHomeworkEditor(page, rowIndex);
+      await clearHomeworkEditor(page, currentRow);
+      clearedCount += 1;
+    }
+
+    const nextPage = await getNextPaginationNumber(page, pageIndex);
+
+    if (!nextPage) {
+      break;
+    }
+
+    const previousSignature = await getHomeworkPageSignature(page);
+    await clickPaginationNumber(page, nextPage, previousSignature);
+    await waitForLoadToSettle(page);
+  }
+
+  console.log(`Очищено строк: ${clearedCount}`);
+}
+
 async function waitForHomeworkTable(page, config) {
   await page.waitForSelector('text=Теми уроків та домашні завдання', {
     timeout: config.defaultTimeout,
@@ -314,6 +372,125 @@ async function getHomeworkPageSignature(page) {
   });
 }
 
+async function goToFirstHomeworkPage(page) {
+  await waitForHomeworkTable(page, { defaultTimeout: 15000 });
+
+  const currentPage = await getCurrentHomeworkPageNumber(page);
+
+  if (currentPage === 1) {
+    console.log('Homework-пагинация уже на первой странице');
+    return;
+  }
+
+  if (!(await hasHomeworkPaginationNumber(page, 1))) {
+    console.log('Кнопка первой страницы homework-пагинации не найдена, считаю страницу первой');
+    return;
+  }
+
+  console.log(`Перехожу на первую страницу homework-пагинации (текущая: ${currentPage || 'неизвестно'})`);
+  const previousSignature = await getHomeworkPageSignature(page);
+  await clickPaginationNumber(page, 1, previousSignature);
+  await waitForLoadToSettle(page);
+}
+
+async function hasHomeworkPaginationNumber(page, pageNumber) {
+  return page.evaluate((targetPageNumber) => {
+    const scope = findHomeworkPaginationScope();
+
+    return Array.from(scope.querySelectorAll('a, button'))
+      .some((element) => (element.textContent || '').trim() === String(targetPageNumber));
+
+    function findHomeworkPaginationScope() {
+      const homeworkRoot = Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"], table'))
+        .find((candidate) => {
+          const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+      const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
+        .filter((element) => /\b\d+\b/.test(element.textContent || ''));
+
+      if (!homeworkRoot || containers.length === 0) {
+        return containers[0] || document;
+      }
+
+      const tableBox = homeworkRoot.getBoundingClientRect();
+      const afterTable = containers
+        .map((element) => ({
+          distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
+          element,
+          top: element.getBoundingClientRect().top,
+        }))
+        .filter((item) => item.top >= tableBox.top - 20)
+        .sort((a, b) => a.distance - b.distance);
+
+      return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
+    }
+  }, pageNumber);
+}
+
+async function getCurrentHomeworkPageNumber(page) {
+  return page.evaluate(() => {
+    const scope = findHomeworkPaginationScope();
+    const activeText = Array.from(scope.querySelectorAll('.active, [aria-current="page"]'))
+      .map((element) => Number((element.textContent || '').trim()))
+      .find((number) => Number.isInteger(number) && number > 0);
+
+    if (activeText) {
+      return activeText;
+    }
+
+    const selectedLink = Array.from(scope.querySelectorAll('a, button'))
+      .find((element) => element.classList.contains('active') || element.getAttribute('aria-current') === 'page');
+
+    if (selectedLink) {
+      const number = Number((selectedLink.textContent || '').trim());
+      return Number.isInteger(number) ? number : null;
+    }
+
+    return null;
+
+    function findHomeworkPaginationScope() {
+      const homeworkRoot = findHomeworkRoot();
+      const containers = Array.from(document.querySelectorAll('.pagination, nav, [class*="pagination"], [class*="pager"]'))
+        .filter((element) => /\b\d+\b/.test(element.textContent || '') && isVisible(element));
+
+      if (!homeworkRoot || containers.length === 0) {
+        return containers[0] || document;
+      }
+
+      const tableBox = homeworkRoot.getBoundingClientRect();
+      const afterTable = containers
+        .map((element) => ({
+          distance: Math.abs(element.getBoundingClientRect().top - tableBox.bottom),
+          element,
+          top: element.getBoundingClientRect().top,
+        }))
+        .filter((item) => item.top >= tableBox.top - 20)
+        .sort((a, b) => a.distance - b.distance);
+
+      return (afterTable[0] && afterTable[0].element) || containers[containers.length - 1] || document;
+    }
+
+    function findHomeworkRoot() {
+      return Array.from(document.querySelectorAll('.homework-table, [class*="homework-table"], table'))
+        .find((candidate) => {
+          const text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return text.includes('тема уроку') && text.includes('домашнє завдання');
+        });
+    }
+
+    function isVisible(element) {
+      const style = window.getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+
+      return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        box.width > 0 &&
+        box.height > 0;
+    }
+  });
+}
+
 async function getEditableRowsCount(page) {
   return page.evaluate(() => {
     return getHomeworkRows().length;
@@ -430,9 +607,7 @@ async function openHomeworkEditor(page, rowIndex) {
 }
 
 async function fillHomeworkEditor(page, sourceRow) {
-  await page.waitForSelector('.modal.show, [role="dialog"], text=Домашнє завдання', {
-    timeout: 10000,
-  });
+  await waitForHomeworkEditor(page);
 
   await setEditorField(page, 'Тема уроку', sourceRow.topic);
   await setEditorField(page, '№ уроку', sourceRow.lessonNumber);
@@ -441,6 +616,31 @@ async function fillHomeworkEditor(page, sourceRow) {
   await page.locator('button:has-text("Зберегти")').last().click();
   await waitForSaveResult(page, sourceRow);
   await waitForLoadToSettle(page);
+}
+
+async function clearHomeworkEditor(page, currentRow) {
+  await waitForHomeworkEditor(page);
+
+  await setEditorField(page, 'Тема уроку', '');
+  await setEditorField(page, 'Домашнє завдання', '');
+
+  await page.locator('button:has-text("Зберегти")').last().click();
+  await waitForSaveResult(page, {
+    homework: '',
+    lessonNumber: currentRow.lessonNumber,
+    topic: '',
+  });
+  await waitForLoadToSettle(page);
+}
+
+async function waitForHomeworkEditor(page) {
+  await page.waitForSelector('.modal.show, [role="dialog"]', {
+    timeout: 10000,
+  }).catch(async () => {
+    await page.waitForSelector('text=Домашнє завдання', {
+      timeout: 10000,
+    });
+  });
 }
 
 async function waitForSaveResult(page, sourceRow) {
@@ -616,7 +816,7 @@ function buildSaveValidationError(state, sourceRow) {
 }
 
 async function setEditorField(page, label, value) {
-  if (!value) {
+  if (value === undefined || value === null) {
     return;
   }
 
@@ -962,5 +1162,6 @@ async function clickPaginationNumber(page, pageNumber, previousSignature = '') {
 }
 
 module.exports = {
+  clearGeography7Homework,
   transferGeography7Homework,
 };

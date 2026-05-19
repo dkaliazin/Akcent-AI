@@ -77,6 +77,10 @@ function runGeography7Transfer() {
   return runBot('fill-geography7.js', 'Заповнити Географія 7');
 }
 
+function runGeography7Cleanup() {
+  return runBot('clear-geography7.js', 'Почистити Теми уроків Географія 7');
+}
+
 async function stopBot() {
   let didSomething = false;
 
@@ -208,6 +212,15 @@ async function handleRequest(request, response) {
     return;
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/clear-geography7') {
+    const started = runGeography7Cleanup();
+    sendJson(response, started ? 202 : 409, {
+      isRunning: state.isRunning,
+      message: started ? 'Запуск начат' : 'Бот уже выполняется',
+    });
+    return;
+  }
+
   if (request.method === 'POST' && url.pathname === '/api/stop') {
     const stopped = await stopBot();
     sendJson(response, stopped ? 202 : 409, {
@@ -278,6 +291,11 @@ function getHtml() {
       color: #451a03;
     }
 
+    #clearGeoButton {
+      background: #8b5cf6;
+      color: #f5f3ff;
+    }
+
     #stopButton {
       background: #ef4444;
       color: #450a0a;
@@ -306,6 +324,7 @@ function getHtml() {
     <p>Нажмите кнопку, чтобы открыть раздел "Навчальні журнали".</p>
     <button id="runButton" type="button">Навчальні журнали</button>
     <button id="fillGeoButton" type="button">Заповнити Географія 7</button>
+    <button id="clearGeoButton" type="button">Почистити Теми уроків Географія 7</button>
     <button id="stopButton" type="button">Остановить / закрыть браузер</button>
     <div id="status" class="status">Статус: загрузка...</div>
     <pre id="logs"></pre>
@@ -313,6 +332,7 @@ function getHtml() {
   <script>
     const runButton = document.getElementById('runButton');
     const fillGeoButton = document.getElementById('fillGeoButton');
+    const clearGeoButton = document.getElementById('clearGeoButton');
     const stopButton = document.getElementById('stopButton');
     const statusElement = document.getElementById('status');
     const logsElement = document.getElementById('logs');
@@ -334,6 +354,7 @@ function getHtml() {
 
       runButton.disabled = status.isRunning;
       fillGeoButton.disabled = status.isRunning;
+      clearGeoButton.disabled = status.isRunning;
       stopButton.disabled = !status.isRunning && !status.canCloseBrowser;
       statusElement.textContent = status.isRunning
         ? 'Статус: выполняется'
@@ -358,6 +379,19 @@ function getHtml() {
 
       try {
         await postJson('/api/fill-geography7');
+        await refreshStatus();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    clearGeoButton.addEventListener('click', async () => {
+      if (!confirm('Очистить темы уроков и домашние задания для Географія 7 текущего 2 семестра?')) {
+        return;
+      }
+
+      try {
+        await postJson('/api/clear-geography7');
         await refreshStatus();
       } catch (error) {
         alert(error.message);
