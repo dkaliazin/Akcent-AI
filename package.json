@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "app": "node app.js",
+    "clear:geography7": "node clear-geography7.js",
     "fill:geography7": "node fill-geography7.js",
     "start": "node main.js",
     "install:browsers": "npx playwright install chromium"
