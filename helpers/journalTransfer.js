@@ -28,16 +28,15 @@ async function transferGeography7Homework(page, config) {
 async function openJournalForSemester(page, config, semesterText, transferConfig) {
   console.log(`Открываю журнал ${transferConfig.subject} ${transferConfig.grade}, семестр: ${semesterText}`);
 
-  await page.goto(`${config.baseUrl}/journal/index`, { waitUntil: 'domcontentloaded' });
-  await waitForLoadToSettle(page);
-  await closeBlockingModals(page, config);
-  await selectSemester(page, semesterText);
-  await waitForLoadToSettle(page);
-
-  console.log('Открываю список журналов');
+  console.log('Открываю раздел "Журнали" перед выбором семестра');
   await page.goto(`${config.baseUrl}/journal/list`, { waitUntil: 'domcontentloaded' });
   await waitForLoadToSettle(page);
   await closeBlockingModals(page, config);
+
+  await selectSemester(page, semesterText);
+  await waitForLoadToSettle(page);
+  await closeBlockingModals(page, config);
+
   await selectJournalFromList(page, config, transferConfig.subject, transferConfig.grade);
   await waitForLoadToSettle(page);
   await closeBlockingModals(page, config);
